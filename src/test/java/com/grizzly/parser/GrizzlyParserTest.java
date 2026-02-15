@@ -21,12 +21,12 @@ class GrizzlyParserTest {
         
         Program program = parse(code);
         
-        assertThat(program.getFunctions()).hasSize(1);
+        assertThat(program.functions()).hasSize(1);
         
-        FunctionDef func = program.getFunctions().get(0);
-        assertThat(func.getName()).isEqualTo("transform");
-        assertThat(func.getParams()).containsExactly("INPUT");
-        assertThat(func.getBody()).hasSize(2); // Assignment + Return
+        FunctionDef func = program.functions().get(0);
+        assertThat(func.name()).isEqualTo("transform");
+        assertThat(func.params()).containsExactly("INPUT");
+        assertThat(func.body()).hasSize(2); // Assignment + Return
     }
     
     @Test
@@ -38,14 +38,14 @@ class GrizzlyParserTest {
             """;
         
         Program program = parse(code);
-        FunctionDef func = program.getFunctions().get(0);
+        FunctionDef func = program.functions().get(0);
         
-        Statement stmt = func.getBody().get(0);
+        Statement stmt = func.body().get(0);
         assertThat(stmt).isInstanceOf(Assignment.class);
         
         Assignment assignment = (Assignment) stmt;
-        assertThat(assignment.getTarget()).isInstanceOf(DictAccess.class);
-        assertThat(assignment.getValue()).isInstanceOf(AttrAccess.class);
+        assertThat(assignment.target()).isInstanceOf(DictAccess.class);
+        assertThat(assignment.value()).isInstanceOf(AttrAccess.class);
     }
     
     @Test
@@ -57,17 +57,17 @@ class GrizzlyParserTest {
             """;
         
         Program program = parse(code);
-        FunctionDef func = program.getFunctions().get(0);
-        Assignment assignment = (Assignment) func.getBody().get(0);
+        FunctionDef func = program.functions().get(0);
+        Assignment assignment = (Assignment) func.body().get(0);
         
         // OUTPUT["customer"]["name"] is nested DictAccess
-        DictAccess outer = (DictAccess) assignment.getTarget();
-        assertThat(outer.getKey()).isInstanceOf(StringLiteral.class);
-        assertThat(((StringLiteral) outer.getKey()).getValue()).isEqualTo("name");
+        DictAccess outer = (DictAccess) assignment.target();
+        assertThat(outer.key()).isInstanceOf(StringLiteral.class);
+        assertThat(((StringLiteral) outer.key()).value()).isEqualTo("name");
         
-        assertThat(outer.getObject()).isInstanceOf(DictAccess.class);
-        DictAccess inner = (DictAccess) outer.getObject();
-        assertThat(((StringLiteral) inner.getKey()).getValue()).isEqualTo("customer");
+        assertThat(outer.object()).isInstanceOf(DictAccess.class);
+        DictAccess inner = (DictAccess) outer.object();
+        assertThat(((StringLiteral) inner.key()).value()).isEqualTo("customer");
     }
     
     @Test
@@ -79,16 +79,16 @@ class GrizzlyParserTest {
             """;
         
         Program program = parse(code);
-        FunctionDef func = program.getFunctions().get(0);
-        Assignment assignment = (Assignment) func.getBody().get(0);
+        FunctionDef func = program.functions().get(0);
+        Assignment assignment = (Assignment) func.body().get(0);
         
         // INPUT.personalInfo.email is nested AttrAccess
-        AttrAccess outer = (AttrAccess) assignment.getValue();
-        assertThat(outer.getAttr()).isEqualTo("email");
+        AttrAccess outer = (AttrAccess) assignment.value();
+        assertThat(outer.attr()).isEqualTo("email");
         
-        assertThat(outer.getObject()).isInstanceOf(AttrAccess.class);
-        AttrAccess inner = (AttrAccess) outer.getObject();
-        assertThat(inner.getAttr()).isEqualTo("personalInfo");
+        assertThat(outer.object()).isInstanceOf(AttrAccess.class);
+        AttrAccess inner = (AttrAccess) outer.object();
+        assertThat(inner.attr()).isEqualTo("personalInfo");
     }
     
     @Test
@@ -104,9 +104,9 @@ class GrizzlyParserTest {
         
         Program program = parse(code);
         
-        assertThat(program.getFunctions()).hasSize(2);
-        assertThat(program.getFunctions().get(0).getName()).isEqualTo("transform");
-        assertThat(program.getFunctions().get(1).getName()).isEqualTo("map_customer");
+        assertThat(program.functions()).hasSize(2);
+        assertThat(program.functions().get(0).name()).isEqualTo("transform");
+        assertThat(program.functions().get(1).name()).isEqualTo("map_customer");
     }
     
     @Test
@@ -121,15 +121,15 @@ class GrizzlyParserTest {
             """;
         
         Program program = parse(code);
-        FunctionDef func = program.getFunctions().get(0);
+        FunctionDef func = program.functions().get(0);
         
-        Statement stmt = func.getBody().get(0);
+        Statement stmt = func.body().get(0);
         assertThat(stmt).isInstanceOf(IfStatement.class);
         
         IfStatement ifStmt = (IfStatement) stmt;
-        assertThat(ifStmt.getCondition()).isInstanceOf(BinaryOp.class);
-        assertThat(ifStmt.getThenBlock()).hasSize(1);
-        assertThat(ifStmt.getElseBlock()).hasSize(1);
+        assertThat(ifStmt.condition()).isInstanceOf(BinaryOp.class);
+        assertThat(ifStmt.thenBlock()).hasSize(1);
+        assertThat(ifStmt.elseBlock()).hasSize(1);
     }
     
     // Helper method

@@ -69,7 +69,7 @@ public class GrizzlyInterpreter {
     private Object executeFunction(FunctionDef func, ExecutionContext context) {
         try {
             // Execute each statement in the function body
-            for (Statement stmt : func.getBody()) {
+            for (Statement stmt : func.body()) {
                 Object result = executeStatement(stmt, context);
                 
                 // If it's a return statement, return immediately
@@ -84,7 +84,7 @@ public class GrizzlyInterpreter {
             throw e;
         } catch (Exception e) {
             throw new GrizzlyExecutionException(
-                "Error executing function '" + func.getName() + "': " + e.getMessage(),
+                "Error executing function '" + func.name() + "': " + e.getMessage(),
                 e
             );
         }
@@ -93,15 +93,19 @@ public class GrizzlyInterpreter {
     /**
      * Execute a single statement
      */
+    /**
+     * Execute a single statement
+     * JDK 21+ Pattern Matching
+     */
     private Object executeStatement(Statement stmt, ExecutionContext context) {
         return switch (stmt) {
             case Assignment a -> executeAssignment(a, context);
-            case ReturnStatement r -> evaluateExpression(r.getValue(), context);
+            case ReturnStatement r -> evaluateExpression(r.value(), context);
             case FunctionCall f -> executeFunctionCall(f, context);
             case IfStatement i -> executeIf(i, context);
             default -> throw new GrizzlyExecutionException(
                 "Unknown statement type: " + stmt.getClass().getSimpleName(),
-                stmt.getLineNumber()
+                stmt.lineNumber()
             );
         };
     }
@@ -112,17 +116,17 @@ public class GrizzlyInterpreter {
     private Object executeAssignment(Assignment assignment, ExecutionContext context) {
         try {
             // Evaluate the right side (the value)
-            Object value = evaluateExpression(assignment.getValue(), context);
+            Object value = evaluateExpression(assignment.value(), context);
             
             // Set the left side (the target)
-            setTarget(assignment.getTarget(), value, context);
+            setTarget(assignment.target(), value, context);
             
             return value;
             
         } catch (Exception e) {
             throw new GrizzlyExecutionException(
                 "Error in assignment: " + e.getMessage(),
-                assignment.getLineNumber()
+                assignment.lineNumber()
             );
         }
     }
@@ -133,11 +137,11 @@ public class GrizzlyInterpreter {
     private Object executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
             // Find the function in the program
-            FunctionDef func = program.findFunction(call.getFunctionName());
+            FunctionDef func = program.findFunction(call.functionName());
             if (func == null) {
                 throw new GrizzlyExecutionException(
-                    "Function '" + call.getFunctionName() + "' not found",
-                    call.getLineNumber()
+                    "Function '" + call.functionName() + "' not found",
+                    call.lineNumber()
                 );
             }
             
@@ -145,8 +149,8 @@ public class GrizzlyInterpreter {
             ExecutionContext funcContext = context.createChild();
             
             // Bind arguments to parameters
-            List<String> params = func.getParams();
-            List<Expression> args = call.getArgs();
+            List<String> params = func.params();
+            List<Expression> args = call.args();
             
             for (int i = 0; i < params.size() && i < args.size(); i++) {
                 Object argValue = evaluateExpression(args.get(i), context);
@@ -160,8 +164,8 @@ public class GrizzlyInterpreter {
             throw e;
         } catch (Exception e) {
             throw new GrizzlyExecutionException(
-                "Error calling function '" + call.getFunctionName() + "': " + e.getMessage(),
-                call.getLineNumber()
+                "Error calling function '" + call.functionName() + "': " + e.getMessage(),
+                call.lineNumber()
             );
         }
     }
@@ -172,21 +176,21 @@ public class GrizzlyInterpreter {
     private Object executeIf(IfStatement ifStmt, ExecutionContext context) {
         try {
             // Evaluate condition
-            Object conditionResult = evaluateExpression(ifStmt.getCondition(), context);
+            Object conditionResult = evaluateExpression(ifStmt.condition(), context);
             
             // Check if condition is true
             boolean isTrue = isTrue(conditionResult);
             
             // Execute appropriate block
             if (isTrue) {
-                for (Statement stmt : ifStmt.getThenBlock()) {
+                for (Statement stmt : ifStmt.thenBlock()) {
                     Object result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
                         return result;
                     }
                 }
-            } else if (ifStmt.getElseBlock() != null) {
-                for (Statement stmt : ifStmt.getElseBlock()) {
+            } else if (ifStmt.elseBlock() != null) {
+                for (Statement stmt : ifStmt.elseBlock()) {
                     Object result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
                         return result;
@@ -201,18 +205,19 @@ public class GrizzlyInterpreter {
         } catch (Exception e) {
             throw new GrizzlyExecutionException(
                 "Error in if statement: " + e.getMessage(),
-                ifStmt.getLineNumber()
+                ifStmt.lineNumber()
             );
         }
     }
     
     /**
      * Evaluate an expression and return its value
+     * JDK 21+ Pattern Matching
      */
     private Object evaluateExpression(Expression expr, ExecutionContext context) {
         return switch (expr) {
-            case Identifier i -> context.get(i.getName());
-            case StringLiteral s -> s.getValue();
+            case Identifier i -> context.get(i.name());
+            case StringLiteral s -> s.value();
             case DictLiteral d -> new HashMap<String, Object>();
             case DictAccess d -> evaluateDictAccess(d, context);
             case AttrAccess a -> evaluateAttrAccess(a, context);
@@ -229,10 +234,10 @@ public class GrizzlyInterpreter {
     @SuppressWarnings("unchecked")
     private Object evaluateDictAccess(DictAccess access, ExecutionContext context) {
         // Get the object (dictionary)
-        Object obj = evaluateExpression(access.getObject(), context);
+        Object obj = evaluateExpression(access.object(), context);
         
         // Get the key
-        Object key = evaluateExpression(access.getKey(), context);
+        Object key = evaluateExpression(access.key(), context);
         
         if (obj instanceof Map) {
             return ((Map<String, Object>) obj).get(key);
@@ -249,14 +254,14 @@ public class GrizzlyInterpreter {
     @SuppressWarnings("unchecked")
     private Object evaluateAttrAccess(AttrAccess access, ExecutionContext context) {
         // Get the object
-        Object obj = evaluateExpression(access.getObject(), context);
+        Object obj = evaluateExpression(access.object(), context);
         
         if (obj instanceof Map) {
-            return ((Map<String, Object>) obj).get(access.getAttr());
+            return ((Map<String, Object>) obj).get(access.attr());
         }
         
         throw new GrizzlyExecutionException(
-            "Cannot access attribute '" + access.getAttr() + "' on non-object: " + obj
+            "Cannot access attribute '" + access.attr() + "' on non-object: " + obj
         );
     }
     
@@ -264,10 +269,10 @@ public class GrizzlyInterpreter {
      * Evaluate binary operation: x == 5, name != "admin"
      */
     private Object evaluateBinaryOp(BinaryOp op, ExecutionContext context) {
-        Object left = evaluateExpression(op.getLeft(), context);
-        Object right = evaluateExpression(op.getRight(), context);
+        Object left = evaluateExpression(op.left(), context);
+        Object right = evaluateExpression(op.right(), context);
         
-        return switch (op.getOperator()) {
+        return switch (op.operator()) {
             case "==" -> equals(left, right);
             case "!=" -> !equals(left, right);
             case "<" -> compare(left, right) < 0;
@@ -275,7 +280,7 @@ public class GrizzlyInterpreter {
             case "<=" -> compare(left, right) <= 0;
             case ">=" -> compare(left, right) >= 0;
             default -> throw new GrizzlyExecutionException(
-                "Unknown operator: " + op.getOperator()
+                "Unknown operator: " + op.operator()
             );
         };
     }
@@ -287,18 +292,18 @@ public class GrizzlyInterpreter {
     private void setTarget(Expression target, Object value, ExecutionContext context) {
         if (target instanceof Identifier) {
             Identifier i = (Identifier) target;
-            context.set(i.getName(), value);
+            context.set(i.name(), value);
         } else if (target instanceof DictAccess) {
             DictAccess d = (DictAccess) target;
             
             // For nested access like OUTPUT["customer"]["name"]
             // We need to create intermediate maps FIRST
-            if (d.getObject() instanceof DictAccess) {
-                ensureMapExists((DictAccess) d.getObject(), context);
+            if (d.object() instanceof DictAccess) {
+                ensureMapExists((DictAccess) d.object(), context);
             }
             
             // Now get the dictionary
-            Object obj = evaluateExpression(d.getObject(), context);
+            Object obj = evaluateExpression(d.object(), context);
             
             if (!(obj instanceof Map)) {
                 throw new GrizzlyExecutionException(
@@ -307,7 +312,7 @@ public class GrizzlyInterpreter {
             }
             
             Map<String, Object> map = (Map<String, Object>) obj;
-            Object key = evaluateExpression(d.getKey(), context);
+            Object key = evaluateExpression(d.key(), context);
             
             // If this is also a nested dict, create it
             if (value == null || !(value instanceof Map)) {
@@ -329,14 +334,14 @@ public class GrizzlyInterpreter {
      */
     @SuppressWarnings("unchecked")
     private void ensureMapExists(DictAccess access, ExecutionContext context) {
-        Object obj = evaluateExpression(access.getObject(), context);
+        Object obj = evaluateExpression(access.object(), context);
         
         if (!(obj instanceof Map)) {
             throw new GrizzlyExecutionException("Expected dictionary");
         }
         
         Map<String, Object> map = (Map<String, Object>) obj;
-        Object key = evaluateExpression(access.getKey(), context);
+        Object key = evaluateExpression(access.key(), context);
         
         if (!map.containsKey(key) || !(map.get(key) instanceof Map)) {
             map.put((String) key, new HashMap<String, Object>());
