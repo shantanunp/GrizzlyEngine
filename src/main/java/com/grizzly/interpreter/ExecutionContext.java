@@ -12,9 +12,11 @@ import java.util.Map;
  * - Any other variables created during execution
  * 
  * Example:
+ * {@code
  * context.set("INPUT", inputData);
  * context.set("OUTPUT", new HashMap<>());
  * Object value = context.get("INPUT");
+ * }
  */
 public class ExecutionContext {
     

@@ -12,17 +12,18 @@ import java.util.Map;
  * 
  * This is the bridge between Java objects and Python dictionaries:
  * 
- * Java POJO → Map (for Python INPUT)
- * Map → Java POJO (for Python OUTPUT)
+ * Java POJO to Map (for Python INPUT)
+ * Map to Java POJO (for Python OUTPUT)
  * 
  * Example:
- * 
+ * {@code
  * Customer customer = new Customer("C123", "John");
  * Map<String, Object> map = mapper.pojoToMap(customer);
  * // Result: {"customerId": "C123", "firstName": "John"}
  * 
  * CustomerDTO dto = mapper.mapToPojo(map, CustomerDTO.class);
  * // Result: CustomerDTO with id="C123", name="John"
+ * }
  */
 public class PojoMapper {
     

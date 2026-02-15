@@ -55,4 +55,42 @@ class GrizzlyLexerTest {
         assertThat(tokens.stream().filter(t -> t.getType() == TokenType.STRING))
             .anyMatch(t -> "hello world".equals(t.getValue()));
     }
+    
+    @Test
+    void shouldTokenizeNumbers() {
+        String code = "age = 42";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens.stream().filter(t -> t.getType() == TokenType.NUMBER))
+            .anyMatch(t -> "42".equals(t.getValue()));
+    }
+    
+    @Test
+    void shouldTokenizeComparisons() {
+        String code = "if x >= 18 and y != 5";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).extracting(Token::getType)
+            .contains(TokenType.IF, TokenType.GE, TokenType.NE);
+    }
+    
+    @Test
+    void shouldHandleComments() {
+        String code = """
+            # This is a comment
+            x = 5  # inline comment
+            """;
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        // Should have tokens but comments are skipped
+        assertThat(tokens).isNotEmpty();
+        assertThat(tokens).extracting(Token::getType)
+            .contains(TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER);
+    }
 }
