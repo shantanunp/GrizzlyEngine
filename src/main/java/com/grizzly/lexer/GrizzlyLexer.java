@@ -3,24 +3,34 @@ package com.grizzly.lexer;
 import com.grizzly.exception.GrizzlyParseException;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Tokenizes Python template into tokens
+ * Lexer (Tokenizer) - Converts Python template text into tokens
+ * 
+ * Example:
+ * Input:  "def transform(INPUT):"
+ * Output: [DEF, IDENTIFIER("transform"), LPAREN, IDENTIFIER("INPUT"), RPAREN, COLON]
+ * 
+ * This is Step 1 of the compilation process:
+ * Text → [Lexer] → Tokens → [Parser] → AST → [Interpreter] → Result
  */
 public class GrizzlyLexer {
     
-    private static final Map<String, TokenType> KEYWORDS = new HashMap<>();
+    // Python keywords we recognize
+    private static final Map<String, TokenType> KEYWORDS = Map.of(
+        "def", TokenType.DEF,
+        "if", TokenType.IF,
+        "else", TokenType.ELSE,
+        "return", TokenType.RETURN
+    );
     
-    static {
-        KEYWORDS.put("def", TokenType.DEF);
-        KEYWORDS.put("if", TokenType.IF);
-        KEYWORDS.put("else", TokenType.ELSE);
-        KEYWORDS.put("return", TokenType.RETURN);
-    }
+    // Constants
+    private static final int SPACES_PER_INDENT = 4;
+    private static final char EOF_CHAR = '\0';
     
+    // Input and state
     private final String source;
     private final List<Token> tokens = new ArrayList<>();
     private int position = 0;
@@ -32,117 +42,78 @@ public class GrizzlyLexer {
         this.source = source;
     }
     
+    /**
+     * Main entry point - tokenize the entire source
+     */
     public List<Token> tokenize() {
         while (!isAtEnd()) {
             tokenizeNext();
         }
         
-        // Add final dedents
-        while (currentIndent > 0) {
-            tokens.add(new Token(TokenType.DEDENT, line, column));
-            currentIndent--;
-        }
-        
-        tokens.add(new Token(TokenType.EOF, line, column));
+        addFinalTokens();
         return tokens;
     }
     
+    /**
+     * Add DEDENT and EOF tokens at the end
+     */
+    private void addFinalTokens() {
+        // Close any open indentation levels
+        while (currentIndent > 0) {
+            addToken(TokenType.DEDENT);
+            currentIndent--;
+        }
+        
+        addToken(TokenType.EOF);
+    }
+    
+    /**
+     * Process the next character(s) and create appropriate token
+     */
     private void tokenizeNext() {
-        char c = peek();
+        char c = currentChar();
         
-        // Skip whitespace (but track indentation at line start)
-        if (c == ' ' || c == '\t') {
+        // Try each token type in order
+        if (isWhitespace(c)) {
             handleIndentation();
-            return;
-        }
-        
-        // Newline
-        if (c == '\n') {
-            tokens.add(new Token(TokenType.NEWLINE, line, column));
-            advance();
-            line++;
-            column = 1;
-            return;
-        }
-        
-        // Comments
-        if (c == '#') {
+        } else if (c == '\n') {
+            handleNewline();
+        } else if (c == '#') {
             skipComment();
-            return;
-        }
-        
-        // String literals
-        if (c == '"' || c == '\'') {
+        } else if (isQuote(c)) {
             tokenizeString(c);
-            return;
-        }
-        
-        // Numbers
-        if (Character.isDigit(c)) {
+        } else if (Character.isDigit(c)) {
             tokenizeNumber();
-            return;
-        }
-        
-        // Identifiers and keywords
-        if (Character.isLetter(c) || c == '_') {
+        } else if (isIdentifierStart(c)) {
             tokenizeIdentifier();
-            return;
-        }
-        
-        // Operators and delimiters
-        switch (c) {
-            case '(' -> addToken(TokenType.LPAREN);
-            case ')' -> addToken(TokenType.RPAREN);
-            case '{' -> addToken(TokenType.LBRACE);
-            case '}' -> addToken(TokenType.RBRACE);
-            case '[' -> addToken(TokenType.LBRACKET);
-            case ']' -> addToken(TokenType.RBRACKET);
-            case ',' -> addToken(TokenType.COMMA);
-            case '.' -> addToken(TokenType.DOT);
-            case ':' -> addToken(TokenType.COLON);
-            case '=' -> {
-                advance();
-                if (peek() == '=') {
-                    addToken(TokenType.EQ);
-                } else {
-                    position--;
-                    column--;
-                    addToken(TokenType.ASSIGN);
-                }
-            }
-            case '!' -> {
-                advance();
-                if (peek() == '=') {
-                    addToken(TokenType.NE);
-                } else {
-                    throw new GrizzlyParseException("Unexpected character '!' at " + line + ":" + column);
-                }
-            }
-            case '<' -> {
-                advance();
-                if (peek() == '=') {
-                    addToken(TokenType.LE);
-                } else {
-                    position--;
-                    column--;
-                    addToken(TokenType.LT);
-                }
-            }
-            case '>' -> {
-                advance();
-                if (peek() == '=') {
-                    addToken(TokenType.GE);
-                } else {
-                    position--;
-                    column--;
-                    addToken(TokenType.GT);
-                }
-            }
-            default -> throw new GrizzlyParseException(
-                "Unexpected character '" + c + "' at " + line + ":" + column);
+        } else {
+            tokenizeSymbol(c);
         }
     }
     
+    // ========== Character Classification ==========
+    
+    private boolean isWhitespace(char c) {
+        return c == ' ' || c == '\t';
+    }
+    
+    private boolean isQuote(char c) {
+        return c == '"' || c == '\'';
+    }
+    
+    private boolean isIdentifierStart(char c) {
+        return Character.isLetter(c) || c == '_';
+    }
+    
+    private boolean isIdentifierPart(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+    
+    // ========== Token Creation Methods ==========
+    
+    /**
+     * Handle Python indentation (spaces/tabs at line start)
+     */
     private void handleIndentation() {
         // Only count indentation at start of line
         if (column != 1) {
@@ -150,134 +121,221 @@ public class GrizzlyLexer {
             return;
         }
         
-        int spaces = 0;
-        while (!isAtEnd() && (peek() == ' ' || peek() == '\t')) {
-            if (peek() == '\t') spaces += 4;
-            else spaces++;
-            advance();
-        }
+        int spaces = countSpaces();
+        int newIndentLevel = spaces / SPACES_PER_INDENT;
         
-        int indent = spaces / 4;
-        
-        while (indent > currentIndent) {
-            tokens.add(new Token(TokenType.INDENT, line, column));
+        // Emit INDENT tokens if we went deeper
+        while (newIndentLevel > currentIndent) {
+            addToken(TokenType.INDENT);
             currentIndent++;
         }
         
-        while (indent < currentIndent) {
-            tokens.add(new Token(TokenType.DEDENT, line, column));
+        // Emit DEDENT tokens if we went back
+        while (newIndentLevel < currentIndent) {
+            addToken(TokenType.DEDENT);
             currentIndent--;
         }
     }
     
+    /**
+     * Count spaces at current position (tab = 4 spaces)
+     */
+    private int countSpaces() {
+        int spaces = 0;
+        while (!isAtEnd() && isWhitespace(currentChar())) {
+            spaces += (currentChar() == '\t') ? SPACES_PER_INDENT : 1;
+            advance();
+        }
+        return spaces;
+    }
+    
+    /**
+     * Handle newline character
+     */
+    private void handleNewline() {
+        addToken(TokenType.NEWLINE);
+        advance();
+        line++;
+        column = 1;
+    }
+    
+    /**
+     * Skip comment (# to end of line)
+     */
     private void skipComment() {
-        while (!isAtEnd() && peek() != '\n') {
+        while (!isAtEnd() && currentChar() != '\n') {
             advance();
         }
     }
     
+    /**
+     * Tokenize string literal ("hello" or 'world')
+     */
     private void tokenizeString(char quote) {
+        int startColumn = column;
         advance(); // Skip opening quote
-        int startColumn = column - 1;
-        StringBuilder sb = new StringBuilder();
         
-        // Handle triple-quoted strings (docstrings)
-        if (peek() == quote && peekNext() == quote) {
-            advance();
-            advance();
-            // Triple-quoted string
-            while (!isAtEnd()) {
-                if (peek() == quote && peekNext() == quote && peekAhead(2) == quote) {
-                    advance();
-                    advance();
-                    advance();
-                    break;
-                }
-                if (peek() == '\n') {
-                    line++;
-                    column = 0;
-                }
-                sb.append(peek());
+        StringBuilder content = new StringBuilder();
+        
+        while (!isAtEnd() && currentChar() != quote) {
+            if (currentChar() == '\\') {
+                content.append(handleEscapeSequence());
+            } else {
+                content.append(currentChar());
                 advance();
             }
-        } else {
-            // Single-quoted string
-            while (!isAtEnd() && peek() != quote) {
-                if (peek() == '\\') {
-                    advance();
-                    if (!isAtEnd()) {
-                        char escaped = peek();
-                        sb.append(switch (escaped) {
-                            case 'n' -> '\n';
-                            case 't' -> '\t';
-                            case 'r' -> '\r';
-                            case '\\' -> '\\';
-                            case '"' -> '"';
-                            case '\'' -> '\'';
-                            default -> escaped;
-                        });
-                        advance();
-                    }
-                } else {
-                    sb.append(peek());
-                    advance();
-                }
-            }
-            
-            if (isAtEnd()) {
-                throw new GrizzlyParseException("Unterminated string at " + line + ":" + startColumn);
-            }
-            
-            advance(); // Skip closing quote
         }
         
-        tokens.add(new Token(TokenType.STRING, sb.toString(), line, startColumn));
+        if (isAtEnd()) {
+            throw error("Unterminated string", startColumn);
+        }
+        
+        advance(); // Skip closing quote
+        addToken(TokenType.STRING, content.toString(), startColumn);
     }
     
+    /**
+     * Handle escape sequences in strings (\n, \t, \\, etc.)
+     */
+    private char handleEscapeSequence() {
+        advance(); // Skip backslash
+        if (isAtEnd()) return '\\';
+        
+        char escaped = currentChar();
+        advance();
+        
+        return switch (escaped) {
+            case 'n' -> '\n';
+            case 't' -> '\t';
+            case 'r' -> '\r';
+            case '\\' -> '\\';
+            case '"' -> '"';
+            case '\'' -> '\'';
+            default -> escaped;
+        };
+    }
+    
+    /**
+     * Tokenize number (42 or 3.14)
+     */
     private void tokenizeNumber() {
         int startColumn = column;
-        StringBuilder sb = new StringBuilder();
+        StringBuilder number = new StringBuilder();
         
-        while (!isAtEnd() && (Character.isDigit(peek()) || peek() == '.')) {
-            sb.append(peek());
+        while (!isAtEnd() && (Character.isDigit(currentChar()) || currentChar() == '.')) {
+            number.append(currentChar());
             advance();
         }
         
-        tokens.add(new Token(TokenType.NUMBER, sb.toString(), line, startColumn));
+        addToken(TokenType.NUMBER, number.toString(), startColumn);
     }
     
+    /**
+     * Tokenize identifier or keyword (transform, OUTPUT, def, if, etc.)
+     */
     private void tokenizeIdentifier() {
         int startColumn = column;
-        StringBuilder sb = new StringBuilder();
+        StringBuilder identifier = new StringBuilder();
         
-        while (!isAtEnd() && (Character.isLetterOrDigit(peek()) || peek() == '_')) {
-            sb.append(peek());
+        while (!isAtEnd() && isIdentifierPart(currentChar())) {
+            identifier.append(currentChar());
             advance();
         }
         
-        String identifier = sb.toString();
-        TokenType type = KEYWORDS.getOrDefault(identifier, TokenType.IDENTIFIER);
-        tokens.add(new Token(type, identifier, line, startColumn));
+        String text = identifier.toString();
+        TokenType type = KEYWORDS.getOrDefault(text, TokenType.IDENTIFIER);
+        addToken(type, text, startColumn);
     }
+    
+    /**
+     * Tokenize symbols and operators (, ), {, }, ==, !=, etc.)
+     */
+    private void tokenizeSymbol(char c) {
+        switch (c) {
+            case '(' -> addTokenAndAdvance(TokenType.LPAREN);
+            case ')' -> addTokenAndAdvance(TokenType.RPAREN);
+            case '{' -> addTokenAndAdvance(TokenType.LBRACE);
+            case '}' -> addTokenAndAdvance(TokenType.RBRACE);
+            case '[' -> addTokenAndAdvance(TokenType.LBRACKET);
+            case ']' -> addTokenAndAdvance(TokenType.RBRACKET);
+            case ',' -> addTokenAndAdvance(TokenType.COMMA);
+            case '.' -> addTokenAndAdvance(TokenType.DOT);
+            case ':' -> addTokenAndAdvance(TokenType.COLON);
+            case '=' -> tokenizeEquals();
+            case '!' -> tokenizeNotEquals();
+            case '<' -> tokenizeLessThan();
+            case '>' -> tokenizeGreaterThan();
+            default -> throw error("Unexpected character '" + c + "'");
+        }
+    }
+    
+    /**
+     * Tokenize = or ==
+     */
+    private void tokenizeEquals() {
+        advance();
+        if (currentChar() == '=') {
+            addTokenAndAdvance(TokenType.EQ);
+        } else {
+            addToken(TokenType.ASSIGN);
+        }
+    }
+    
+    /**
+     * Tokenize !=
+     */
+    private void tokenizeNotEquals() {
+        advance();
+        if (currentChar() == '=') {
+            addTokenAndAdvance(TokenType.NE);
+        } else {
+            throw error("Expected '=' after '!'");
+        }
+    }
+    
+    /**
+     * Tokenize < or <=
+     */
+    private void tokenizeLessThan() {
+        advance();
+        if (currentChar() == '=') {
+            addTokenAndAdvance(TokenType.LE);
+        } else {
+            addToken(TokenType.LT);
+        }
+    }
+    
+    /**
+     * Tokenize > or >=
+     */
+    private void tokenizeGreaterThan() {
+        advance();
+        if (currentChar() == '=') {
+            addTokenAndAdvance(TokenType.GE);
+        } else {
+            addToken(TokenType.GT);
+        }
+    }
+    
+    // ========== Token Addition Helpers ==========
     
     private void addToken(TokenType type) {
         tokens.add(new Token(type, line, column));
+    }
+    
+    private void addToken(TokenType type, String value, int startColumn) {
+        tokens.add(new Token(type, value, line, startColumn));
+    }
+    
+    private void addTokenAndAdvance(TokenType type) {
+        addToken(type);
         advance();
     }
     
-    private char peek() {
-        if (isAtEnd()) return '\0';
-        return source.charAt(position);
-    }
+    // ========== Character Navigation ==========
     
-    private char peekNext() {
-        if (position + 1 >= source.length()) return '\0';
-        return source.charAt(position + 1);
-    }
-    
-    private char peekAhead(int offset) {
-        if (position + offset >= source.length()) return '\0';
-        return source.charAt(position + offset);
+    private char currentChar() {
+        return isAtEnd() ? EOF_CHAR : source.charAt(position);
     }
     
     private void advance() {
@@ -289,5 +347,15 @@ public class GrizzlyLexer {
     
     private boolean isAtEnd() {
         return position >= source.length();
+    }
+    
+    // ========== Error Handling ==========
+    
+    private GrizzlyParseException error(String message) {
+        return new GrizzlyParseException(message + " at " + line + ":" + column);
+    }
+    
+    private GrizzlyParseException error(String message, int col) {
+        return new GrizzlyParseException(message + " at " + line + ":" + col);
     }
 }
