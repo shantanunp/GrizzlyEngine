@@ -36,12 +36,12 @@ public class GrizzlyParser {
         
         // Parse all functions
         while (!isAtEnd()) {
-            if (peek().getType() == TokenType.DEF) {
+            if (peek().type() == TokenType.DEF) {
                 functions.add(parseFunction());
                 skipNewlines(); // Skip blank lines between functions
-            } else if (peek().getType() == TokenType.NEWLINE || peek().getType() == TokenType.COMMENT) {
+            } else if (peek().type() == TokenType.NEWLINE || peek().type() == TokenType.COMMENT) {
                 advance();
-            } else if (peek().getType() == TokenType.EOF) {
+            } else if (peek().type() == TokenType.EOF) {
                 break;
             } else {
                 advance(); // Skip unknown tokens for now
@@ -60,25 +60,25 @@ public class GrizzlyParser {
      * Example: def transform(INPUT):
      */
     private FunctionDef parseFunction() {
-        int lineNumber = peek().getLine();
+        int lineNumber = peek().line();
         
         // Consume 'def'
         expect(TokenType.DEF, "Expected 'def'");
         
         // Get function name
-        String name = expect(TokenType.IDENTIFIER, "Expected function name").getValue();
+        String name = expect(TokenType.IDENTIFIER, "Expected function name").value();
         
         // Parse parameters
         expect(TokenType.LPAREN, "Expected '('");
         List<String> params = new ArrayList<>();
         
-        if (peek().getType() != TokenType.RPAREN) {
+        if (peek().type() != TokenType.RPAREN) {
             do {
-                params.add(expect(TokenType.IDENTIFIER, "Expected parameter name").getValue());
-                if (peek().getType() == TokenType.COMMA) {
+                params.add(expect(TokenType.IDENTIFIER, "Expected parameter name").value());
+                if (peek().type() == TokenType.COMMA) {
                     advance();
                 }
-            } while (peek().getType() != TokenType.RPAREN);
+            } while (peek().type() != TokenType.RPAREN);
         }
         
         expect(TokenType.RPAREN, "Expected ')'");
@@ -98,7 +98,7 @@ public class GrizzlyParser {
         List<Statement> statements = new ArrayList<>();
         
         while (!isAtEnd()) {
-            TokenType type = peek().getType();
+            TokenType type = peek().type();
             
             // Stop at next function definition or EOF
             if (type == TokenType.DEF || type == TokenType.EOF) {
@@ -122,39 +122,39 @@ public class GrizzlyParser {
      * Parse a single statement
      */
     private Statement parseStatement() {
-        int lineNumber = peek().getLine();
+        int lineNumber = peek().line();
         
         // Return statement
-        if (peek().getType() == TokenType.RETURN) {
+        if (peek().type() == TokenType.RETURN) {
             advance();
             Expression value = parseExpression();
             return new ReturnStatement(value, lineNumber);
         }
         
         // If statement
-        if (peek().getType() == TokenType.IF) {
+        if (peek().type() == TokenType.IF) {
             return parseIfStatement();
         }
         
         // Check for function call (identifier followed by '(')
-        if (peek().getType() == TokenType.IDENTIFIER) {
+        if (peek().type() == TokenType.IDENTIFIER) {
             Token identToken = peek();
             int savePos = position;
             advance();
             
-            if (peek().getType() == TokenType.LPAREN) {
+            if (peek().type() == TokenType.LPAREN) {
                 // It's a function call
-                String functionName = identToken.getValue();
+                String functionName = identToken.value();
                 advance(); // Skip '('
                 
                 List<Expression> args = new ArrayList<>();
-                if (peek().getType() != TokenType.RPAREN) {
+                if (peek().type() != TokenType.RPAREN) {
                     do {
                         args.add(parseExpression());
-                        if (peek().getType() == TokenType.COMMA) {
+                        if (peek().type() == TokenType.COMMA) {
                             advance();
                         }
-                    } while (peek().getType() != TokenType.RPAREN);
+                    } while (peek().type() != TokenType.RPAREN);
                 }
                 
                 expect(TokenType.RPAREN, "Expected ')'");
@@ -169,7 +169,7 @@ public class GrizzlyParser {
         Expression expr = parseExpression();
         
         // Check if it's an assignment
-        if (peek().getType() == TokenType.ASSIGN) {
+        if (peek().type() == TokenType.ASSIGN) {
             advance();
             Expression value = parseExpression();
             return new Assignment(expr, value, lineNumber);
@@ -182,7 +182,7 @@ public class GrizzlyParser {
      * Parse if statement
      */
     private IfStatement parseIfStatement() {
-        int lineNumber = peek().getLine();
+        int lineNumber = peek().line();
         
         expect(TokenType.IF, "Expected 'if'");
         Expression condition = parseComparison();
@@ -190,20 +190,20 @@ public class GrizzlyParser {
         skipNewlines();
         
         // Skip optional INDENT token
-        if (peek().getType() == TokenType.INDENT) {
+        if (peek().type() == TokenType.INDENT) {
             advance();
         }
         
         List<Statement> thenBlock = parseIfBlock();
         
         List<Statement> elseBlock = null;
-        if (peek().getType() == TokenType.ELSE) {
+        if (peek().type() == TokenType.ELSE) {
             advance();
             expect(TokenType.COLON, "Expected ':'");
             skipNewlines();
             
             // Skip optional INDENT token
-            if (peek().getType() == TokenType.INDENT) {
+            if (peek().type() == TokenType.INDENT) {
                 advance();
             }
             
@@ -220,7 +220,7 @@ public class GrizzlyParser {
         List<Statement> statements = new ArrayList<>();
         
         while (!isAtEnd()) {
-            TokenType type = peek().getType();
+            TokenType type = peek().type();
             
             // Stop at else, dedent, next function, or EOF
             if (type == TokenType.ELSE || type == TokenType.DEDENT || 
@@ -239,7 +239,7 @@ public class GrizzlyParser {
         }
         
         // Consume trailing DEDENT if present
-        if (peek().getType() == TokenType.DEDENT) {
+        if (peek().type() == TokenType.DEDENT) {
             advance();
         }
         
@@ -252,12 +252,12 @@ public class GrizzlyParser {
     private Expression parseComparison() {
         Expression left = parseExpression();
         
-        TokenType type = peek().getType();
+        TokenType type = peek().type();
         if (type == TokenType.EQ || type == TokenType.NE || 
             type == TokenType.LT || type == TokenType.GT ||
             type == TokenType.LE || type == TokenType.GE) {
             
-            String operator = peek().getValue() != null ? peek().getValue() : 
+            String operator = peek().value() != null ? peek().value() : 
                 switch (type) {
                     case EQ -> "==";
                     case NE -> "!=";
@@ -289,55 +289,55 @@ public class GrizzlyParser {
         Token token = peek();
         
         // String literal
-        if (token.getType() == TokenType.STRING) {
+        if (token.type() == TokenType.STRING) {
             advance();
-            return new StringLiteral(token.getValue());
+            return new StringLiteral(token.value());
         }
         
         // Number literal
-        if (token.getType() == TokenType.NUMBER) {
+        if (token.type() == TokenType.NUMBER) {
             advance();
-            return new StringLiteral(token.getValue()); // Treat numbers as strings for now
+            return new StringLiteral(token.value()); // Treat numbers as strings for now
         }
         
         // Dict literal: {}
-        if (token.getType() == TokenType.LBRACE) {
+        if (token.type() == TokenType.LBRACE) {
             advance();
             expect(TokenType.RBRACE, "Expected '}'");
             return new DictLiteral();
         }
         
         // Identifier (variable name)
-        if (token.getType() == TokenType.IDENTIFIER) {
-            String name = token.getValue();
+        if (token.type() == TokenType.IDENTIFIER) {
+            String name = token.value();
             advance();
             Expression expr = new Identifier(name);
             
             // Check for dict access or attribute access
             while (true) {
-                if (peek().getType() == TokenType.LBRACKET) {
+                if (peek().type() == TokenType.LBRACKET) {
                     // Dict access: OUTPUT["key"]
                     advance();
                     Expression key = parseExpression();
                     expect(TokenType.RBRACKET, "Expected ']'");
                     expr = new DictAccess(expr, key);
-                } else if (peek().getType() == TokenType.DOT) {
+                } else if (peek().type() == TokenType.DOT) {
                     // Attribute access: INPUT.customerId
                     advance();
-                    String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").getValue();
+                    String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").value();
                     expr = new AttrAccess(expr, attr);
-                } else if (peek().getType() == TokenType.LPAREN) {
+                } else if (peek().type() == TokenType.LPAREN) {
                     // Function call: func(args)
                     advance();
                     List<Expression> args = new ArrayList<>();
                     
-                    if (peek().getType() != TokenType.RPAREN) {
+                    if (peek().type() != TokenType.RPAREN) {
                         do {
                             args.add(parseExpression());
-                            if (peek().getType() == TokenType.COMMA) {
+                            if (peek().type() == TokenType.COMMA) {
                                 advance();
                             }
-                        } while (peek().getType() != TokenType.RPAREN);
+                        } while (peek().type() != TokenType.RPAREN);
                     }
                     
                     expect(TokenType.RPAREN, "Expected ')'");
@@ -355,7 +355,7 @@ public class GrizzlyParser {
             return expr;
         }
         
-        throw new GrizzlyParseException("Unexpected token: " + token, token.getLine(), token.getColumn());
+        throw new GrizzlyParseException("Unexpected token: " + token, token.line(), token.column());
     }
     
     // === Helper methods ===
@@ -374,22 +374,22 @@ public class GrizzlyParser {
     
     private boolean isAtEnd() {
         if (position >= tokens.size()) return true;
-        return tokens.get(position).getType() == TokenType.EOF;
+        return tokens.get(position).type() == TokenType.EOF;
     }
     
     private Token expect(TokenType type, String message) {
-        if (peek().getType() != type) {
+        if (peek().type() != type) {
             throw new GrizzlyParseException(
-                message + ", got " + peek().getType(), 
-                peek().getLine(), 
-                peek().getColumn()
+                message + ", got " + peek().type(), 
+                peek().line(), 
+                peek().column()
             );
         }
         return advance();
     }
     
     private void skipNewlines() {
-        while (!isAtEnd() && peek().getType() == TokenType.NEWLINE) {
+        while (!isAtEnd() && peek().type() == TokenType.NEWLINE) {
             advance();
         }
     }

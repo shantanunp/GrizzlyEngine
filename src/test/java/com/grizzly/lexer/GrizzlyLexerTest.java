@@ -20,9 +20,9 @@ class GrizzlyLexerTest {
         List<Token> tokens = lexer.tokenize();
         
         assertThat(tokens).isNotEmpty();
-        assertThat(tokens.get(0).getType()).isEqualTo(TokenType.DEF);
-        assertThat(tokens.stream().filter(t -> t.getType() == TokenType.IDENTIFIER))
-            .anyMatch(t -> "transform".equals(t.getValue()));
+        assertThat(tokens.get(0).type()).isEqualTo(TokenType.DEF);
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.IDENTIFIER))
+            .anyMatch(t -> "transform".equals(t.value()));
     }
     
     @Test
@@ -32,7 +32,7 @@ class GrizzlyLexerTest {
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();
         
-        assertThat(tokens).extracting(Token::getType)
+        assertThat(tokens).extracting(Token::type)
             .contains(
                 TokenType.IDENTIFIER,  // OUTPUT
                 TokenType.LBRACKET,    // [
@@ -52,8 +52,8 @@ class GrizzlyLexerTest {
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();
         
-        assertThat(tokens.stream().filter(t -> t.getType() == TokenType.STRING))
-            .anyMatch(t -> "hello world".equals(t.getValue()));
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.STRING))
+            .anyMatch(t -> "hello world".equals(t.value()));
     }
     
     @Test
@@ -63,8 +63,8 @@ class GrizzlyLexerTest {
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();
         
-        assertThat(tokens.stream().filter(t -> t.getType() == TokenType.NUMBER))
-            .anyMatch(t -> "42".equals(t.getValue()));
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.NUMBER))
+            .anyMatch(t -> "42".equals(t.value()));
     }
     
     @Test
@@ -74,7 +74,7 @@ class GrizzlyLexerTest {
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();
         
-        assertThat(tokens).extracting(Token::getType)
+        assertThat(tokens).extracting(Token::type)
             .contains(TokenType.IF, TokenType.GE, TokenType.NE);
     }
     
@@ -90,7 +90,7 @@ class GrizzlyLexerTest {
         
         // Should have tokens but comments are skipped
         assertThat(tokens).isNotEmpty();
-        assertThat(tokens).extracting(Token::getType)
+        assertThat(tokens).extracting(Token::type)
             .contains(TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER);
     }
 }
