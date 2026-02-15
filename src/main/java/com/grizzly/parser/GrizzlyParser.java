@@ -82,11 +82,24 @@ public class GrizzlyParser {
         }
         
         expect(TokenType.RPAREN, "Expected ')'");
-        expect(TokenType.COLON, "Expected ':'");
+        expect(TokenType.COLON, "Expected ':' after function signature");
         skipNewlines();
         
-        // Parse function body (just parse statements until we hit another def or EOF)
+        // Skip INDENT if present (flexible for multiple functions)
+        if (peek().type() == TokenType.INDENT) {
+            advance();
+        }
+        
+        // Parse function body
         List<Statement> body = parseBlock();
+        
+        if (body.isEmpty()) {
+            throw new GrizzlyParseException(
+                "Function body cannot be empty at line " + lineNumber,
+                lineNumber,
+                1
+            );
+        }
         
         return new FunctionDef(name, params, body, lineNumber);
     }
@@ -186,28 +199,45 @@ public class GrizzlyParser {
         
         expect(TokenType.IF, "Expected 'if'");
         Expression condition = parseComparison();
-        expect(TokenType.COLON, "Expected ':'");
+        expect(TokenType.COLON, "Expected ':' after if condition");
         skipNewlines();
         
-        // Skip optional INDENT token
+        // Skip INDENT if present (flexible)
         if (peek().type() == TokenType.INDENT) {
             advance();
         }
         
         List<Statement> thenBlock = parseIfBlock();
         
+        if (thenBlock.isEmpty()) {
+            throw new GrizzlyParseException(
+                "'if' block cannot be empty at line " + lineNumber,
+                lineNumber,
+                1
+            );
+        }
+        
         List<Statement> elseBlock = null;
         if (peek().type() == TokenType.ELSE) {
+            int elseLine = peek().line();
             advance();
-            expect(TokenType.COLON, "Expected ':'");
+            expect(TokenType.COLON, "Expected ':' after else");
             skipNewlines();
             
-            // Skip optional INDENT token
+            // Skip INDENT if present (flexible)
             if (peek().type() == TokenType.INDENT) {
                 advance();
             }
             
             elseBlock = parseIfBlock();
+            
+            if (elseBlock.isEmpty()) {
+                throw new GrizzlyParseException(
+                    "'else' block cannot be empty at line " + elseLine,
+                    elseLine,
+                    1
+                );
+            }
         }
         
         return new IfStatement(condition, thenBlock, elseBlock, lineNumber);

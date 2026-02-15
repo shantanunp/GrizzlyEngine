@@ -1,0 +1,21 @@
+{
+  "customerId": "C12345",
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "phone": "+1-555-1234",
+  "age": 35,
+  "accountType": "PREMIUM",
+  "balance": 15000.50,
+  "address": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "zipCode": "94102",
+    "country": "USA"
+  },
+  "preferences": {
+    "newsletter": true,
+    "notifications": "email"
+  }
+}
