@@ -6,25 +6,35 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Represents a datetime value with timezone support.
+ * A date and time value with timezone.
  * 
- * <p><b>Usage examples:</b>
+ * <p>Stores a specific moment in time (like "February 22, 2024 at 2:30 PM in New York").
+ * 
+ * <p><b>How to create:</b>
  * <pre>{@code
- * // Get current time
+ * // Current time
  * now = now()
  * 
- * // Parse from string
+ * // From a string
  * date = parseDate("2024-02-22", "yyyy-MM-dd")
+ * date = parseDate("22/02/2024", "dd/MM/yyyy")
  * 
- * // Add/subtract time
- * tomorrow = addDays(now, 1)
- * nextMonth = addMonths(now, 1)
- * 
- * // Format output
- * formatted = formatDate(tomorrow, "dd/MM/yyyy")
+ * // With timezone
+ * utcTime = now("UTC")
+ * nyTime = now("America/New_York")
  * }</pre>
  * 
- * @author Grizzly Engine
+ * <p><b>What you can do:</b>
+ * <pre>{@code
+ * // Add or subtract time
+ * tomorrow = addDays(today, 1)
+ * nextWeek = addDays(today, 7)
+ * lastMonth = addMonths(today, -1)
+ * 
+ * // Format as string
+ * formatted = formatDate(date, "dd/MM/yyyy")  // "22/02/2024"
+ * formatted = formatDate(date, "yyyyMMdd")    // "20240222"
+ * }</pre>
  */
 public class DateTimeValue {
     
@@ -49,40 +59,63 @@ public class DateTimeValue {
     }
     
     /**
-     * Add days to this datetime.
+     * Add days to this date.
      * 
-     * @param days Number of days to add (can be negative)
-     * @return New DateTimeValue with days added
+     * <p>Use positive numbers to go forward, negative to go back.
+     * <pre>{@code
+     * tomorrow = date.addDays(1)
+     * yesterday = date.addDays(-1)
+     * nextWeek = date.addDays(7)
+     * }</pre>
+     * 
+     * @param days How many days to add (negative = subtract)
+     * @return New date with days added
      */
     public DateTimeValue addDays(long days) {
         return new DateTimeValue(value.plusDays(days));
     }
     
     /**
-     * Add months to this datetime.
+     * Add months to this date.
      * 
-     * @param months Number of months to add (can be negative)
-     * @return New DateTimeValue with months added
+     * <p>Use positive to go forward, negative to go back.
+     * <pre>{@code
+     * nextMonth = date.addMonths(1)
+     * lastYear = date.addMonths(-12)
+     * }</pre>
+     * 
+     * @param months How many months to add (negative = subtract)
+     * @return New date with months added
      */
     public DateTimeValue addMonths(long months) {
         return new DateTimeValue(value.plusMonths(months));
     }
     
     /**
-     * Add years to this datetime.
+     * Add years to this date.
      * 
-     * @param years Number of years to add (can be negative)
-     * @return New DateTimeValue with years added
+     * <pre>{@code
+     * nextYear = date.addYears(1)
+     * tenYearsAgo = date.addYears(-10)
+     * }</pre>
+     * 
+     * @param years How many years to add (negative = subtract)
+     * @return New date with years added
      */
     public DateTimeValue addYears(long years) {
         return new DateTimeValue(value.plusYears(years));
     }
     
     /**
-     * Add hours to this datetime.
+     * Add hours to this time.
      * 
-     * @param hours Number of hours to add (can be negative)
-     * @return New DateTimeValue with hours added
+     * <pre>{@code
+     * twoHoursLater = time.addHours(2)
+     * threeHoursEarlier = time.addHours(-3)
+     * }</pre>
+     * 
+     * @param hours How many hours to add (negative = subtract)
+     * @return New time with hours added
      */
     public DateTimeValue addHours(long hours) {
         return new DateTimeValue(value.plusHours(hours));

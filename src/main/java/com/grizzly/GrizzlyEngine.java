@@ -14,25 +14,45 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Main Grizzly Engine API
+ * Grizzly Engine - Transforms data using Python-like templates.
  * 
- * This is what users interact with:
+ * <p>This is your starting point. Create an engine, give it a template,
+ * and it transforms your data.
  * 
- * Simple usage:
- * ```java
+ * <p><b>Quick Start:</b>
+ * <pre>{@code
+ * // 1. Create engine
  * GrizzlyEngine engine = new GrizzlyEngine();
- * OutputPojo result = engine.transform(inputPojo, "transform.py", OutputPojo.class);
- * ```
  * 
- * With caching (recommended for production):
- * ```java
+ * // 2. Write template as string
+ * String template = """
+ *     def transform(INPUT):
+ *         OUTPUT = {}
+ *         OUTPUT["name"] = INPUT.firstName + " " + INPUT.lastName
+ *         return OUTPUT
+ *     """;
+ * 
+ * // 3. Compile template
+ * GrizzlyTemplate compiled = engine.compileFromString(template);
+ * 
+ * // 4. Execute with your data
+ * Map<String, Object> input = Map.of("firstName", "John", "lastName", "Doe");
+ * Map<String, Object> result = compiled.executeRaw(input);
+ * 
+ * System.out.println(result.get("name")); // "John Doe"
+ * }</pre>
+ * 
+ * <p><b>For Production (with caching):</b>
+ * <pre>{@code
  * GrizzlyEngine engine = new GrizzlyEngine();
- * GrizzlyTemplate template = engine.compile("transform.py");
+ * GrizzlyTemplate template = engine.compile("templates/customer.py");
  * 
- * for (InputPojo input : batch) {
- *     OutputPojo output = template.execute(input, OutputPojo.class);
+ * // Reuse template for many inputs (much faster!)
+ * for (Customer customer : customers) {
+ *     CustomerDTO output = template.execute(customer, CustomerDTO.class);
+ *     process(output);
  * }
- * ```
+ * }</pre>
  */
 public class GrizzlyEngine {
     

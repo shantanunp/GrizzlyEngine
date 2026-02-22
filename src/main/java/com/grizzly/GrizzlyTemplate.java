@@ -7,19 +7,25 @@ import com.grizzly.parser.ast.Program;
 import java.util.Map;
 
 /**
- * A compiled Grizzly template
+ * A compiled template ready to transform data.
  * 
- * This represents a parsed and ready-to-execute template.
- * You can execute it multiple times with different input data.
+ * <p>Think of this like a recipe. You compile it once, then use it many times.
  * 
- * Example:
+ * <p><b>Why compile once?</b>
+ * <br>Compiling is slow (parses the template). Executing is fast.
+ * <br>So compile once, execute many times = better performance!
  * 
+ * <p><b>Example:</b>
+ * <pre>{@code
+ * // Compile once
  * GrizzlyTemplate template = engine.compile("transform.py");
  * 
- * // Execute many times
+ * // Execute many times (fast!)
  * for (Customer customer : customers) {
- *     CustomerDTO dto = template.execute(customer, CustomerDTO.class);
+ *     CustomerDTO result = template.execute(customer, CustomerDTO.class);
+ *     save(result);
  * }
+ * }</pre>
  */
 public class GrizzlyTemplate {
     
@@ -34,11 +40,13 @@ public class GrizzlyTemplate {
     }
     
     /**
-     * Execute the template with input data
+     * Transform input data to output data.
      * 
-     * @param input Input POJO
-     * @param outputClass Output class type
-     * @return Output POJO
+     * <p>Converts your Java object to a Map, runs the template, converts back to Java.
+     * 
+     * @param input Your input object (any POJO)
+     * @param outputClass What type you want back
+     * @return Transformed output object
      */
     public <T> T execute(Object input, Class<T> outputClass) {
         // Convert input POJO to Map (Python INPUT)

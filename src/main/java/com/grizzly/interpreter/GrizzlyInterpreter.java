@@ -48,57 +48,58 @@ public class GrizzlyInterpreter {
     }
     
     /**
-     * Register all built-in functions available to templates.
+     * Sets up all the built-in functions you can use in templates.
      * 
-     * <p><b>Currently available:</b>
+     * <p><b>Functions you can use:</b>
      * <ul>
-     *   <li>{@code len(object)} - Get size/length
+     *   <li><b>len(thing)</b> - Count items
      *     <ul>
-     *       <li>For lists: {@code len([1,2,3])} → 3</li>
-     *       <li>For strings: {@code len("hello")} → 5</li>
-     *       <li>For dicts: {@code len({"a":1, "b":2})} → 2</li>
+     *       <li>{@code len([1,2,3])} → 3 (list size)</li>
+     *       <li>{@code len("hello")} → 5 (string length)</li>
      *     </ul>
      *   </li>
-     *   <li>{@code range(stop)} or {@code range(start, stop)} or {@code range(start, stop, step)} - Generate number sequences
+     *   
+     *   <li><b>range()</b> - Make number lists
      *     <ul>
      *       <li>{@code range(5)} → [0, 1, 2, 3, 4]</li>
      *       <li>{@code range(2, 7)} → [2, 3, 4, 5, 6]</li>
-     *       <li>{@code range(0, 10, 2)} → [0, 2, 4, 6, 8]</li>
-     *       <li>{@code range(10, 0, -2)} → [10, 8, 6, 4, 2]</li>
+     *       <li>{@code range(0, 10, 2)} → [0, 2, 4, 6, 8] (every 2nd)</li>
      *     </ul>
      *   </li>
-     *   <li>{@code now()} or {@code now(timezone)} - Get current datetime
+     *   
+     *   <li><b>now()</b> - Get current time
      *     <ul>
-     *       <li>{@code now()} → Current datetime in system timezone</li>
-     *       <li>{@code now("UTC")} → Current datetime in UTC</li>
-     *       <li>{@code now("America/New_York")} → Current datetime in EST/EDT</li>
+     *       <li>{@code now()} → right now</li>
+     *       <li>{@code now("UTC")} → right now in UTC</li>
+     *       <li>{@code now("America/New_York")} → right now in New York</li>
      *     </ul>
      *   </li>
-     *   <li>{@code parseDate(dateString, format)} - Parse string to datetime
+     *   
+     *   <li><b>parseDate(text, pattern)</b> - Convert text to date
      *     <ul>
      *       <li>{@code parseDate("2024-02-22", "yyyy-MM-dd")}</li>
      *       <li>{@code parseDate("22/02/2024", "dd/MM/yyyy")}</li>
+     *       <li>{@code parseDate("20240222", "yyyyMMdd")}</li>
      *     </ul>
      *   </li>
-     *   <li>{@code formatDate(datetime, format)} - Format datetime to string
+     *   
+     *   <li><b>formatDate(date, pattern)</b> - Convert date to text
      *     <ul>
      *       <li>{@code formatDate(now(), "yyyyMMdd")} → "20240222"</li>
      *       <li>{@code formatDate(now(), "dd/MM/yyyy")} → "22/02/2024"</li>
      *     </ul>
      *   </li>
-     *   <li>{@code addDays(datetime, days)} - Add days to datetime</li>
-     *   <li>{@code addMonths(datetime, months)} - Add months to datetime</li>
-     *   <li>{@code addYears(datetime, years)} - Add years to datetime</li>
-     *   <li>{@code addHours(datetime, hours)} - Add hours to datetime</li>
-     *   <li>{@code addMinutes(datetime, minutes)} - Add minutes to datetime</li>
+     *   
+     *   <li><b>Add time:</b>
+     *     <ul>
+     *       <li>{@code addDays(date, 5)} - add 5 days</li>
+     *       <li>{@code addMonths(date, 2)} - add 2 months</li>
+     *       <li>{@code addYears(date, 1)} - add 1 year</li>
+     *       <li>{@code addHours(time, 3)} - add 3 hours</li>
+     *       <li>{@code addMinutes(time, 30)} - add 30 minutes</li>
+     *     </ul>
+     *   </li>
      * </ul>
-     * 
-     * <p><b>Adding new built-ins:</b>
-     * <pre>{@code
-     * builtinFunctions.put("max", (args) -> {
-     *     // Validate args, implement logic, return result
-     * });
-     * }</pre>
      */
     private void registerBuiltins() {
         // len() function
