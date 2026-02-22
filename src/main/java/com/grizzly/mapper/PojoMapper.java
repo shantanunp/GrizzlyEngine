@@ -36,17 +36,57 @@ public class PojoMapper {
     }
     
     /**
-     * Convert a POJO to a Map
+     * Convert a POJO to a Map, preserving special types like DateTimeValue
      * 
      * @param pojo Any Java object
      * @return Map representation
      */
     public Map<String, Object> pojoToMap(Object pojo) {
         try {
-            return jackson.convertValue(pojo, new TypeReference<Map<String, Object>>() {});
+            // Special handling for DateTimeValue - don't convert it
+            if (pojo instanceof com.grizzly.types.DateTimeValue) {
+                return java.util.Collections.singletonMap("value", pojo);
+            }
+            
+            Map<String, Object> result = jackson.convertValue(pojo, new TypeReference<Map<String, Object>>() {});
+            
+            // Recursively preserve DateTimeValue in nested maps
+            return preserveDateTimeValues(result);
         } catch (Exception e) {
             throw new RuntimeException("Failed to convert POJO to Map: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Recursively preserve DateTimeValue objects in maps
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> preserveDateTimeValues(Map<String, Object> map) {
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            Object value = entry.getValue();
+            
+            if (value instanceof Map) {
+                Map<String, Object> nestedMap = (Map<String, Object>) value;
+                
+                // Check if this is a serialized DateTimeValue
+                if (nestedMap.containsKey("value") && 
+                    nestedMap.get("value") instanceof String &&
+                    nestedMap.size() <= 10) { // DateTimeValue has specific fields
+                    // Leave as-is (might be DateTimeValue)
+                } else {
+                    entry.setValue(preserveDateTimeValues(nestedMap));
+                }
+            } else if (value instanceof java.util.List) {
+                // Preserve in lists too
+                java.util.List<Object> list = (java.util.List<Object>) value;
+                for (int i = 0; i < list.size(); i++) {
+                    if (list.get(i) instanceof Map) {
+                        list.set(i, preserveDateTimeValues((Map<String, Object>) list.get(i)));
+                    }
+                }
+            }
+        }
+        return map;
     }
     
     /**

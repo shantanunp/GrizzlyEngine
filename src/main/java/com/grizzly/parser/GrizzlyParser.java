@@ -134,6 +134,11 @@ public class GrizzlyParser {
     /**
      * Parse a single statement
      */
+    /**
+     * Parse a single statement.
+     * 
+     * <p>Handles all statement types: return, if, for, break, continue, assignments, function calls.
+     */
     private Statement parseStatement() {
         int lineNumber = peek().line();
         
@@ -142,6 +147,18 @@ public class GrizzlyParser {
             advance();
             Expression value = parseExpression();
             return new ReturnStatement(value, lineNumber);
+        }
+        
+        // Break statement
+        if (peek().type() == TokenType.BREAK) {
+            advance();
+            return new BreakStatement(lineNumber);
+        }
+        
+        // Continue statement
+        if (peek().type() == TokenType.CONTINUE) {
+            advance();
+            return new ContinueStatement(lineNumber);
         }
         
         // If statement
@@ -205,6 +222,33 @@ public class GrizzlyParser {
     /**
      * Parse if statement
      */
+    /**
+     * Parse if/elif/else statement with support for multiple elif branches.
+     * 
+     * <p><b>Syntax:</b>
+     * <pre>{@code
+     * if condition:
+     *     statements
+     * elif condition:
+     *     statements
+     * elif condition:
+     *     statements
+     * else:
+     *     statements
+     * }</pre>
+     * 
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * if x < 0:
+     *     status = "negative"
+     * elif x == 0:
+     *     status = "zero"
+     * else:
+     *     status = "positive"
+     * }</pre>
+     * 
+     * @return IfStatement with all branches
+     */
     private IfStatement parseIfStatement() {
         int lineNumber = peek().line();
         
@@ -228,6 +272,51 @@ public class GrizzlyParser {
             );
         }
         
+        // Consume DEDENT after if block
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+        
+        // Skip newlines (but NOT dedents/indents) to find elif/else
+        skipNewlines();
+        
+        // Parse elif branches (can be multiple)
+        List<IfStatement.ElifBranch> elifBranches = new ArrayList<>();
+        while (peek().type() == TokenType.ELIF) {
+            int elifLine = peek().line();
+            advance(); // consume elif
+            
+            Expression elifCondition = parseComparison();
+            expect(TokenType.COLON, "Expected ':' after elif condition");
+            skipNewlines();
+            
+            // Skip INDENT if present
+            if (peek().type() == TokenType.INDENT) {
+                advance();
+            }
+            
+            List<Statement> elifBlock = parseIfBlock();
+            
+            if (elifBlock.isEmpty()) {
+                throw new GrizzlyParseException(
+                    "'elif' block cannot be empty at line " + elifLine,
+                    elifLine,
+                    1
+                );
+            }
+            
+            elifBranches.add(new IfStatement.ElifBranch(elifCondition, elifBlock));
+            
+            // Consume DEDENT after elif block
+            if (peek().type() == TokenType.DEDENT) {
+                advance();
+            }
+            
+            // Skip newlines (but NOT dedents) to find next elif/else
+            skipNewlines();
+        }
+        
+        // Parse else block (optional)
         List<Statement> elseBlock = null;
         if (peek().type() == TokenType.ELSE) {
             int elseLine = peek().line();
@@ -249,13 +338,19 @@ public class GrizzlyParser {
                     1
                 );
             }
+            
+            // Consume DEDENT after else block
+            if (peek().type() == TokenType.DEDENT) {
+                advance();
+            }
         }
         
-        return new IfStatement(condition, thenBlock, elseBlock, lineNumber);
+        return new IfStatement(condition, thenBlock, elifBranches, elseBlock, lineNumber);
     }
     
     /**
-     * Parse if/else block (stops at ELSE, DEDENT, DEF, or EOF)
+     * Parse if/elif/else block (stops at ELIF, ELSE, DEDENT, DEF, or EOF)
+     * Note: Does NOT consume the DEDENT - caller must handle it
      */
     private List<Statement> parseIfBlock() {
         List<Statement> statements = new ArrayList<>();
@@ -263,8 +358,8 @@ public class GrizzlyParser {
         while (!isAtEnd()) {
             TokenType type = peek().type();
             
-            // Stop at else, dedent, next function, or EOF
-            if (type == TokenType.ELSE || type == TokenType.DEDENT || 
+            // Stop at elif, else, dedent, next function, or EOF
+            if (type == TokenType.ELIF || type == TokenType.ELSE || type == TokenType.DEDENT || 
                 type == TokenType.DEF || type == TokenType.EOF) {
                 break;
             }
@@ -279,10 +374,7 @@ public class GrizzlyParser {
             skipNewlines();
         }
         
-        // Consume trailing DEDENT if present
-        if (peek().type() == TokenType.DEDENT) {
-            advance();
-        }
+        // Do NOT consume DEDENT - let caller handle it
         
         return statements;
     }
@@ -344,28 +436,57 @@ public class GrizzlyParser {
             );
         }
         
+        // Consume DEDENT after for loop body
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+        
         return new ForLoop(variable, iterable, body, lineNumber);
     }
     
     /**
+     * Parse the body of a for loop with proper indent level tracking.
+     * 
+     * <p>Correctly handles nested structures by tracking indentation depth:
+     * <pre>{@code
+     * for i in range(3):        # Start at indent level N
+     *     for j in range(5):    # Nested - level N+1
+     *         OUTPUT.append(j)
+     *     # DEDENT to N - inner loop done, outer continues
+     *     OUTPUT.append(i)      # Still at level N
+     * # DEDENT below N - outer loop done
+     * }</pre>
+     * 
+     * @return List of statements in the for loop body
+     */
+    /**
      * Parse the body of a for loop.
      * 
-     * <p>A for loop body is a sequence of indented statements that execute for each
-     * iteration. Unlike {@code parseIfBlock()}, this does NOT stop at IF tokens
-     * because if statements are valid inside for loops.
+     * <p>Handles nested structures properly by tracking what we just parsed.
+     * When we parse a compound statement (if/for), the DEDENT that follows
+     * might belong to that statement OR to our loop - we check by looking ahead.
      * 
      * <p><b>Example:</b>
      * <pre>{@code
-     * for customer in INPUT.customers:
-     *     user = {}                    ← Assignment
-     *     if customer.age >= 18:       ← If statement (NOT a block terminator!)
-     *         user["status"] = "adult"
-     *     OUTPUT["users"].append(user) ← Method call
-     * ← DEDENT here - block ends
+     * for person in people:
+     *     if age >= 18:
+     *         append(name)
+     *     # DEDENT from if - we continue
+     *     process(person)  # More statements at this level
+     * # DEDENT from for - we exit
      * }</pre>
      * 
-     * <p><b>Stopping conditions:</b>
-     * DEDENT (end of indentation), FOR (next loop), DEF (new function), or EOF
+     * @return List of statements in the for loop body
+     */
+    /**
+     * Parse the body of a for loop.
+     * 
+     * <p>Parses statements until hitting a DEDENT that ends this block.
+     * Does NOT consume the DEDENT - the caller (parseForLoop) will consume it.
+     * 
+     * <p><b>Important:</b> Nested compound statements (if/for) will also end
+     * at DEDENT, and their parsers will consume their DEDENTs. So when we
+     * see a DEDENT, it's the one that ends OUR block.
      * 
      * @return List of statements in the for loop body
      */
@@ -375,10 +496,8 @@ public class GrizzlyParser {
         while (!isAtEnd()) {
             TokenType type = peek().type();
             
-            // Stop at dedent, next for/def, or EOF
-            // NOTE: Don't stop at IF - it's a statement inside the loop!
-            if (type == TokenType.DEDENT || type == TokenType.FOR || 
-                type == TokenType.DEF || type == TokenType.EOF) {
+            // Stop at DEDENT (caller will consume it), EOF, or next function
+            if (type == TokenType.DEDENT || type == TokenType.EOF || type == TokenType.DEF) {
                 break;
             }
             
@@ -388,13 +507,11 @@ public class GrizzlyParser {
                 continue;
             }
             
+            // Parse a statement
             statements.add(parseStatement());
+            
+            // Skip any newlines after the statement
             skipNewlines();
-        }
-        
-        // Consume trailing DEDENT if present
-        if (peek().type() == TokenType.DEDENT) {
-            advance();
         }
         
         return statements;
@@ -610,6 +727,14 @@ public class GrizzlyParser {
     private Expression parsePrimary() {
         Token token = peek();
         
+        // Unary minus (negative numbers): -5, -10
+        if (token.type() == TokenType.MINUS) {
+            advance();
+            Expression expr = parsePrimary(); // Get the number after minus
+            // Wrap in binary op: 0 - expr
+            return new BinaryOp(new NumberLiteral(0), "-", expr);
+        }
+        
         // String literal
         if (token.type() == TokenType.STRING) {
             advance();
@@ -619,7 +744,21 @@ public class GrizzlyParser {
         // Number literal
         if (token.type() == TokenType.NUMBER) {
             advance();
-            return new StringLiteral(token.value()); // Treat numbers as strings for now
+            String value = token.value();
+            try {
+                // Parse as integer if no decimal point
+                if (!value.contains(".")) {
+                    return new NumberLiteral(Integer.parseInt(value));
+                } else {
+                    return new NumberLiteral(Double.parseDouble(value));
+                }
+            } catch (NumberFormatException e) {
+                throw new GrizzlyParseException(
+                    "Invalid number format: " + value,
+                    token.line(),
+                    token.column()
+                );
+            }
         }
         
         // Dict literal: {}

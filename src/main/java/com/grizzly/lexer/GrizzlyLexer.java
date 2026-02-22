@@ -22,10 +22,13 @@ public class GrizzlyLexer {
     private static final Map<String, TokenType> KEYWORDS = Map.of(
         "def", TokenType.DEF,
         "if", TokenType.IF,
+        "elif", TokenType.ELIF,
         "else", TokenType.ELSE,
         "return", TokenType.RETURN,
         "for", TokenType.FOR,
-        "in", TokenType.IN
+        "in", TokenType.IN,
+        "break", TokenType.BREAK,
+        "continue", TokenType.CONTINUE
     );
     
     // Constants

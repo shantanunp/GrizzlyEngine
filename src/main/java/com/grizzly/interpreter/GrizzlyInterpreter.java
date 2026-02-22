@@ -59,6 +59,38 @@ public class GrizzlyInterpreter {
      *       <li>For dicts: {@code len({"a":1, "b":2})} → 2</li>
      *     </ul>
      *   </li>
+     *   <li>{@code range(stop)} or {@code range(start, stop)} or {@code range(start, stop, step)} - Generate number sequences
+     *     <ul>
+     *       <li>{@code range(5)} → [0, 1, 2, 3, 4]</li>
+     *       <li>{@code range(2, 7)} → [2, 3, 4, 5, 6]</li>
+     *       <li>{@code range(0, 10, 2)} → [0, 2, 4, 6, 8]</li>
+     *       <li>{@code range(10, 0, -2)} → [10, 8, 6, 4, 2]</li>
+     *     </ul>
+     *   </li>
+     *   <li>{@code now()} or {@code now(timezone)} - Get current datetime
+     *     <ul>
+     *       <li>{@code now()} → Current datetime in system timezone</li>
+     *       <li>{@code now("UTC")} → Current datetime in UTC</li>
+     *       <li>{@code now("America/New_York")} → Current datetime in EST/EDT</li>
+     *     </ul>
+     *   </li>
+     *   <li>{@code parseDate(dateString, format)} - Parse string to datetime
+     *     <ul>
+     *       <li>{@code parseDate("2024-02-22", "yyyy-MM-dd")}</li>
+     *       <li>{@code parseDate("22/02/2024", "dd/MM/yyyy")}</li>
+     *     </ul>
+     *   </li>
+     *   <li>{@code formatDate(datetime, format)} - Format datetime to string
+     *     <ul>
+     *       <li>{@code formatDate(now(), "yyyyMMdd")} → "20240222"</li>
+     *       <li>{@code formatDate(now(), "dd/MM/yyyy")} → "22/02/2024"</li>
+     *     </ul>
+     *   </li>
+     *   <li>{@code addDays(datetime, days)} - Add days to datetime</li>
+     *   <li>{@code addMonths(datetime, months)} - Add months to datetime</li>
+     *   <li>{@code addYears(datetime, years)} - Add years to datetime</li>
+     *   <li>{@code addHours(datetime, hours)} - Add hours to datetime</li>
+     *   <li>{@code addMinutes(datetime, minutes)} - Add minutes to datetime</li>
      * </ul>
      * 
      * <p><b>Adding new built-ins:</b>
@@ -69,6 +101,7 @@ public class GrizzlyInterpreter {
      * }</pre>
      */
     private void registerBuiltins() {
+        // len() function
         builtinFunctions.put("len", (args) -> {
             if (args.size() != 1) {
                 throw new GrizzlyExecutionException(
@@ -90,6 +123,251 @@ public class GrizzlyInterpreter {
                     (obj != null ? obj.getClass().getSimpleName() : "null")
                 );
             }
+        });
+        
+        // range() function - generates sequences of numbers
+        builtinFunctions.put("range", (args) -> {
+            if (args.size() < 1 || args.size() > 3) {
+                throw new GrizzlyExecutionException(
+                    "range() takes 1-3 arguments, got " + args.size()
+                );
+            }
+            
+            int start, stop, step;
+            
+            if (args.size() == 1) {
+                // range(stop)
+                start = 0;
+                stop = (int) toNumber(args.get(0));
+                step = 1;
+            } else if (args.size() == 2) {
+                // range(start, stop)
+                start = (int) toNumber(args.get(0));
+                stop = (int) toNumber(args.get(1));
+                step = 1;
+            } else {
+                // range(start, stop, step)
+                start = (int) toNumber(args.get(0));
+                stop = (int) toNumber(args.get(1));
+                step = (int) toNumber(args.get(2));
+                
+                if (step == 0) {
+                    throw new GrizzlyExecutionException("range() step cannot be zero");
+                }
+            }
+            
+            List<Object> result = new ArrayList<>();
+            
+            if (step > 0) {
+                // Positive step: increment
+                for (int i = start; i < stop; i += step) {
+                    result.add(i);
+                }
+            } else {
+                // Negative step: decrement
+                for (int i = start; i > stop; i += step) {
+                    result.add(i);
+                }
+            }
+            
+            return result;
+        });
+        
+        // now() function - current datetime
+        builtinFunctions.put("now", (args) -> {
+            if (args.size() > 1) {
+                throw new GrizzlyExecutionException(
+                    "now() takes 0 or 1 argument (optional timezone), got " + args.size()
+                );
+            }
+            
+            if (args.isEmpty()) {
+                return new com.grizzly.types.DateTimeValue(java.time.ZonedDateTime.now());
+            } else {
+                String timezone = args.get(0).toString();
+                try {
+                    java.time.ZoneId zone = java.time.ZoneId.of(timezone);
+                    return new com.grizzly.types.DateTimeValue(java.time.ZonedDateTime.now(zone));
+                } catch (Exception e) {
+                    throw new GrizzlyExecutionException(
+                        "Invalid timezone: " + timezone + ". Use formats like 'UTC', 'America/New_York', 'Asia/Tokyo'"
+                    );
+                }
+            }
+        });
+        
+        // parseDate() function - parse string to datetime
+        builtinFunctions.put("parseDate", (args) -> {
+            if (args.size() != 2 && args.size() != 3) {
+                throw new GrizzlyExecutionException(
+                    "parseDate() requires 2 or 3 arguments: (dateString, format, [timezone])"
+                );
+            }
+            
+            String dateString = args.get(0).toString();
+            String format = args.get(1).toString();
+            
+            try {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern(format);
+                
+                if (args.size() == 3) {
+                    // With timezone
+                    String timezone = args.get(2).toString();
+                    java.time.ZoneId zone = java.time.ZoneId.of(timezone);
+                    
+                    // Try LocalDateTime first, then LocalDate
+                    try {
+                        java.time.ZonedDateTime parsed = java.time.ZonedDateTime.parse(dateString, formatter.withZone(zone));
+                        return new com.grizzly.types.DateTimeValue(parsed);
+                    } catch (Exception e1) {
+                        try {
+                            java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
+                            return new com.grizzly.types.DateTimeValue(local.atZone(zone));
+                        } catch (Exception e2) {
+                            java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
+                            return new com.grizzly.types.DateTimeValue(date.atStartOfDay(zone));
+                        }
+                    }
+                } else {
+                    // Without timezone - use system default
+                    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+                    
+                    // Try LocalDateTime first, then LocalDate
+                    try {
+                        java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
+                        return new com.grizzly.types.DateTimeValue(local.atZone(zone));
+                    } catch (Exception e) {
+                        // Fall back to LocalDate (date-only format like yyyy-MM-dd)
+                        java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
+                        return new com.grizzly.types.DateTimeValue(date.atStartOfDay(zone));
+                    }
+                }
+            } catch (Exception e) {
+                throw new GrizzlyExecutionException(
+                    "Failed to parse date '" + dateString + "' with format '" + format + "': " + e.getMessage()
+                );
+            }
+        });
+        
+        // formatDate() function - format datetime to string
+        builtinFunctions.put("formatDate", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "formatDate() requires 2 arguments: (datetime, format)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "formatDate() first argument must be a datetime, got: " + args.get(0).getClass().getSimpleName()
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            String format = args.get(1).toString();
+            
+            try {
+                return dt.format(format);
+            } catch (Exception e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid date format '" + format + "': " + e.getMessage()
+                );
+            }
+        });
+        
+        // addDays() function
+        builtinFunctions.put("addDays", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "addDays() requires 2 arguments: (datetime, days)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "addDays() first argument must be a datetime"
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            long days = (long) toNumber(args.get(1));
+            return dt.addDays(days);
+        });
+        
+        // addMonths() function
+        builtinFunctions.put("addMonths", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "addMonths() requires 2 arguments: (datetime, months)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "addMonths() first argument must be a datetime"
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            long months = (long) toNumber(args.get(1));
+            return dt.addMonths(months);
+        });
+        
+        // addYears() function
+        builtinFunctions.put("addYears", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "addYears() requires 2 arguments: (datetime, years)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "addYears() first argument must be a datetime"
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            long years = (long) toNumber(args.get(1));
+            return dt.addYears(years);
+        });
+        
+        // addHours() function
+        builtinFunctions.put("addHours", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "addHours() requires 2 arguments: (datetime, hours)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "addHours() first argument must be a datetime"
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            long hours = (long) toNumber(args.get(1));
+            return dt.addHours(hours);
+        });
+        
+        // addMinutes() function
+        builtinFunctions.put("addMinutes", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "addMinutes() requires 2 arguments: (datetime, minutes)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+                throw new GrizzlyExecutionException(
+                    "addMinutes() first argument must be a datetime"
+                );
+            }
+            
+            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
+            long minutes = (long) toNumber(args.get(1));
+            return dt.addMinutes(minutes);
         });
     }
     
@@ -113,6 +391,8 @@ public class GrizzlyInterpreter {
             case IfStatement i -> executeIf(i, context);
             case ForLoop forLoop -> executeForLoop(forLoop, context);
             case ExpressionStatement e -> evaluateExpression(e.expression(), context);
+            case BreakStatement b -> throw new com.grizzly.exception.BreakException();
+            case ContinueStatement c -> throw new com.grizzly.exception.ContinueException();
             default -> throw new GrizzlyExecutionException(
                 "Unknown statement type: " + stmt.getClass().getSimpleName(),
                 stmt.lineNumber()
@@ -274,19 +554,90 @@ public class GrizzlyInterpreter {
      * @param context Execution context
      * @return null normally, or return value if block contains return statement
      */
+    /**
+     * Execute an if/elif/else statement - choose which branch to run.
+     * 
+     * <p><b>Simple if (no else):</b>
+     * <pre>{@code
+     * if age >= 18:
+     *     status = "adult"
+     * 
+     * Steps:
+     * 1. Evaluate condition: age >= 18 → true or false
+     * 2. If true: execute "status = adult"
+     * 3. If false: skip the block
+     * 4. Continue after if
+     * }</pre>
+     * 
+     * <p><b>If with elif (NEW!):</b>
+     * <pre>{@code
+     * if x < 0:
+     *     status = "negative"
+     * elif x == 0:
+     *     status = "zero"
+     * elif x == 1:
+     *     status = "one"
+     * else:
+     *     status = "many"
+     * 
+     * Steps:
+     * 1. Evaluate first condition: x < 0
+     * 2. If true: run "negative" block, SKIP all elif/else
+     * 3. If false: try first elif: x == 0
+     * 4. If true: run "zero" block, SKIP remaining elif/else
+     * 5. If false: try second elif: x == 1
+     * 6. If true: run "one" block, SKIP else
+     * 7. If false: run else block
+     * }</pre>
+     * 
+     * <p><b>Early return in any branch:</b>
+     * <pre>{@code
+     * if found:
+     *     return result  // Exits immediately!
+     * elif fallback:
+     *     return default // Also exits immediately!
+     * }</pre>
+     * 
+     * @param ifStmt The IfStatement AST node
+     * @param context Execution context
+     * @return null normally, or return value if block contains return statement
+     */
     private Object executeIf(IfStatement ifStmt, ExecutionContext context) {
         try {
+            // Try main if condition
             Object conditionValue = evaluateExpression(ifStmt.condition(), context);
             boolean condition = isTrue(conditionValue);
             
             if (condition) {
+                // Execute if block
                 for (Statement stmt : ifStmt.thenBlock()) {
                     Object result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
                         return result;
                     }
                 }
-            } else if (ifStmt.elseBlock() != null) {
+                return null; // Executed if block, skip elif/else
+            }
+            
+            // Try elif branches (if any)
+            for (IfStatement.ElifBranch elifBranch : ifStmt.elifBranches()) {
+                Object elifConditionValue = evaluateExpression(elifBranch.condition(), context);
+                boolean elifCondition = isTrue(elifConditionValue);
+                
+                if (elifCondition) {
+                    // Execute this elif block
+                    for (Statement stmt : elifBranch.statements()) {
+                        Object result = executeStatement(stmt, context);
+                        if (stmt instanceof ReturnStatement) {
+                            return result;
+                        }
+                    }
+                    return null; // Executed elif block, skip remaining elif/else
+                }
+            }
+            
+            // Execute else block (if present and no if/elif matched)
+            if (ifStmt.elseBlock() != null) {
                 for (Statement stmt : ifStmt.elseBlock()) {
                     Object result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
@@ -296,6 +647,9 @@ public class GrizzlyInterpreter {
             }
             
             return null;
+        } catch (com.grizzly.exception.BreakException | com.grizzly.exception.ContinueException e) {
+            // Let these pass through to the enclosing loop
+            throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -342,6 +696,28 @@ public class GrizzlyInterpreter {
      * @return null if loop completes, or return value if body contains return
      * @throws GrizzlyExecutionException if iterable is invalid
      */
+    /**
+     * Execute a for loop with support for break and continue.
+     * 
+     * <p><b>Break example:</b>
+     * <pre>{@code
+     * for item in items:
+     *     if item.id == searchId:
+     *         break  // Exit loop immediately
+     * }</pre>
+     * 
+     * <p><b>Continue example:</b>
+     * <pre>{@code
+     * for num in range(10):
+     *     if num % 2 == 0:
+     *         continue  // Skip even numbers
+     *     OUTPUT["odds"].append(num)
+     * }</pre>
+     * 
+     * @param forLoop The ForLoop AST node
+     * @param context Execution context
+     * @return null if loop completes, or return value if body contains return
+     */
     private Object executeForLoop(ForLoop forLoop, ExecutionContext context) {
         try {
             Object iterableObj = evaluateExpression(forLoop.iterable(), context);
@@ -363,20 +739,37 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            for (Object item : items) {
+            // Iterate over items - labeled for break/continue
+            itemLoop: for (Object item : items) {
                 context.set(forLoop.variable(), item);
                 
+                // Execute loop body statements
                 for (Statement stmt : forLoop.body()) {
-                    Object result = executeStatement(stmt, context);
-                    
-                    if (stmt instanceof ReturnStatement) {
-                        return result;
+                    try {
+                        Object result = executeStatement(stmt, context);
+                        
+                        // Handle return statements
+                        if (stmt instanceof ReturnStatement) {
+                            return result;
+                        }
+                    } catch (com.grizzly.exception.BreakException e) {
+                        // Break out of item loop
+                        break itemLoop;
+                    } catch (com.grizzly.exception.ContinueException e) {
+                        // Continue to next item
+                        continue itemLoop;
                     }
                 }
             }
             
             return null;
             
+        } catch (com.grizzly.exception.BreakException | com.grizzly.exception.ContinueException e) {
+            // These should have been caught by the loop above
+            throw new GrizzlyExecutionException(
+                "break/continue outside of loop at line " + forLoop.lineNumber(),
+                forLoop.lineNumber()
+            );
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -390,6 +783,7 @@ public class GrizzlyInterpreter {
     private Object evaluateExpression(Expression expr, ExecutionContext context) {
         try {
             return switch (expr) {
+                case NumberLiteral n -> n.value();
                 case StringLiteral s -> s.value();
                 case Identifier i -> context.get(i.name());
                 case DictLiteral d -> new HashMap<String, Object>();
@@ -546,11 +940,57 @@ public class GrizzlyInterpreter {
             case "//" -> evaluateNumericOp(left, right, "//");
             case "%" -> evaluateNumericOp(left, right, "%");
             case "**" -> evaluateNumericOp(left, right, "**");
-            case "==" -> java.util.Objects.equals(left, right);
-            case "!=" -> !java.util.Objects.equals(left, right);
+            case "==" -> evaluateEquality(left, right, true);
+            case "!=" -> evaluateEquality(left, right, false);
             case "<", ">", "<=", ">=" -> evaluateComparison(left, right, operator);
             default -> throw new GrizzlyExecutionException("Unknown operator: " + operator);
         };
+    }
+    
+    /**
+     * Evaluate equality (== or !=) with numeric type coercion.
+     * 
+     * <p>Handles numeric comparisons properly: 0 == 0.0, "5" == 5, etc.
+     * 
+     * @param left Left operand
+     * @param right Right operand  
+     * @param checkEqual true for ==, false for !=
+     * @return boolean result
+     */
+    private boolean evaluateEquality(Object left, Object right, boolean checkEqual) {
+        // Try numeric comparison if both could be numbers
+        boolean leftIsNumeric = left instanceof Number || 
+                               (left instanceof String && isNumericString((String) left));
+        boolean rightIsNumeric = right instanceof Number || 
+                                (right instanceof String && isNumericString((String) right));
+        
+        if (leftIsNumeric && rightIsNumeric) {
+            try {
+                double leftNum = toNumber(left);
+                double rightNum = toNumber(right);
+                boolean equal = Math.abs(leftNum - rightNum) < 1e-10;
+                return checkEqual ? equal : !equal;
+            } catch (Exception e) {
+                // Fall through to object equality
+            }
+        }
+        
+        // Regular object equality
+        boolean equal = java.util.Objects.equals(left, right);
+        return checkEqual ? equal : !equal;
+    }
+    
+    /**
+     * Check if a string represents a number.
+     */
+    private boolean isNumericString(String s) {
+        if (s == null || s.isEmpty()) return false;
+        try {
+            Double.parseDouble(s);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
     
     /**
@@ -899,7 +1339,10 @@ public class GrizzlyInterpreter {
         double l = toNumber(left);
         double r = toNumber(right);
         
-        return switch (operator) {
+        // Check if both are integers
+        boolean bothIntegers = (l == Math.floor(l)) && (r == Math.floor(r));
+        
+        double result = switch (operator) {
             case "+" -> l + r;
             case "-" -> l - r;
             case "*" -> l * r;
@@ -909,6 +1352,13 @@ public class GrizzlyInterpreter {
             case "**" -> Math.pow(l, r);  // Power
             default -> throw new GrizzlyExecutionException("Unknown numeric operator: " + operator);
         };
+        
+        // Return integer if both inputs were integers and result is whole number
+        // Exception: division always returns double
+        if (bothIntegers && result == Math.floor(result) && !operator.equals("/")) {
+            return (int) result;
+        }
+        return result;
     }
     
     private boolean evaluateComparison(Object left, Object right, String operator) {
@@ -936,5 +1386,11 @@ public class GrizzlyInterpreter {
         }
         throw new GrizzlyExecutionException("Cannot convert " + value.getClass().getSimpleName() + " to number");
     }
+    
+    /**
+     * Internal class to signal loop control flow (break/continue).
+     * 
+     * <p>Used to propagate break/continue up the call stack to the enclosing loop.
+     */
 }
 

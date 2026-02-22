@@ -7,10 +7,13 @@ public enum TokenType {
     // Keywords
     DEF,        // def
     IF,         // if
+    ELIF,       // elif
     ELSE,       // else
     RETURN,     // return
     FOR,        // for
     IN,         // in
+    BREAK,      // break
+    CONTINUE,   // continue
     
     // Literals
     IDENTIFIER, // variable names, function names
