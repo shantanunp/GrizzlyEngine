@@ -107,27 +107,55 @@ public class GrizzlyParser {
     /**
      * Parse an indented block of statements
      */
+    /**
+     * Parse an indented block of statements (function body).
+     *
+     * <p>A block is a sequence of statements at the same indentation level.
+     * The block ends when we encounter:
+     * <ul>
+     *   <li>DEDENT token - returning to outer indentation level</li>
+     *   <li>DEF token - start of a new function definition</li>
+     *   <li>EOF token - end of file</li>
+     * </ul>
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * def transform(INPUT):
+     *     OUTPUT = {}        ← Block starts (after INDENT)
+     *     x = 1             ← Part of block
+     *     return OUTPUT     ← Part of block
+     *                       ← DEDENT here - block ends
+     * def helper():         ← New function (DEF)
+     * }</pre>
+     *
+     * @return List of statements in the block
+     */
     private List<Statement> parseBlock() {
         List<Statement> statements = new ArrayList<>();
-        
+
         while (!isAtEnd()) {
             TokenType type = peek().type();
-            
-            // Stop at next function definition or EOF
-            if (type == TokenType.DEF || type == TokenType.EOF) {
+
+            // Stop at end of block (DEDENT), next function (DEF), or end of file
+            if (type == TokenType.DEDENT || type == TokenType.DEF || type == TokenType.EOF) {
                 break;
             }
-            
-            // Skip newlines and dedents
-            if (type == TokenType.NEWLINE || type == TokenType.DEDENT || type == TokenType.INDENT) {
+
+            // Skip newlines and extra indents
+            if (type == TokenType.NEWLINE || type == TokenType.INDENT) {
                 advance();
                 continue;
             }
-            
+
             statements.add(parseStatement());
             skipNewlines();
         }
-        
+
+        // Consume the DEDENT token if present (clean up for next block)
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+
         return statements;
     }
     
