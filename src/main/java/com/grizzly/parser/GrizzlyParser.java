@@ -445,48 +445,23 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse the body of a for loop with proper indent level tracking.
-     * 
-     * <p>Correctly handles nested structures by tracking indentation depth:
-     * <pre>{@code
-     * for i in range(3):        # Start at indent level N
-     *     for j in range(5):    # Nested - level N+1
-     *         OUTPUT.append(j)
-     *     # DEDENT to N - inner loop done, outer continues
-     *     OUTPUT.append(i)      # Still at level N
-     * # DEDENT below N - outer loop done
-     * }</pre>
-     * 
-     * @return List of statements in the for loop body
-     */
-    /**
-     * Parse the body of a for loop.
-     * 
-     * <p>Handles nested structures properly by tracking what we just parsed.
-     * When we parse a compound statement (if/for), the DEDENT that follows
-     * might belong to that statement OR to our loop - we check by looking ahead.
-     * 
-     * <p><b>Example:</b>
-     * <pre>{@code
-     * for person in people:
-     *     if age >= 18:
-     *         append(name)
-     *     # DEDENT from if - we continue
-     *     process(person)  # More statements at this level
-     * # DEDENT from for - we exit
-     * }</pre>
-     * 
-     * @return List of statements in the for loop body
-     */
-    /**
      * Parse the body of a for loop.
      * 
      * <p>Parses statements until hitting a DEDENT that ends this block.
      * Does NOT consume the DEDENT - the caller (parseForLoop) will consume it.
      * 
-     * <p><b>Important:</b> Nested compound statements (if/for) will also end
-     * at DEDENT, and their parsers will consume their DEDENTs. So when we
-     * see a DEDENT, it's the one that ends OUR block.
+     * <p><b>Important:</b> Nested compound statements (if/for) consume their own
+     * DEDENTs via parseIfStatement/parseForLoop. So when parseForBlock sees a
+     * DEDENT, it's the one that ends this for loop's block.
+     * 
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * for person in people:
+     *     if age >= 18:           # INDENT
+     *         append(name)        # Statement
+     *     # DEDENT (consumed by parseIfStatement)
+     * # DEDENT (seen by parseForBlock, exits loop)
+     * }</pre>
      * 
      * @return List of statements in the for loop body
      */
