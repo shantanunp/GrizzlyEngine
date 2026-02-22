@@ -20,6 +20,12 @@ public enum TokenType {
     // Operators
     ASSIGN,     // =
     PLUS,       // +
+    MINUS,      // -
+    STAR,       // *
+    SLASH,      // /
+    DOUBLESLASH,// //
+    PERCENT,    // %
+    DOUBLESTAR, // **
     EQ,         // ==
     NE,         // !=
     LT,         // <

@@ -427,15 +427,21 @@ public class GrizzlyInterpreter {
      * 3. Call dict.get("name") → return value
      * }</pre>
      * 
-     * <p><b>List example:</b>
+     * <p><b>List with positive index:</b>
      * <pre>{@code
-     * first = items[0]
+     * first = items[0]    // First element
+     * second = items[1]   // Second element
+     * }</pre>
      * 
-     * Steps:
-     * 1. Evaluate items → get the list object
-     * 2. Evaluate 0 → get number/string "0"
-     * 3. Convert to int: 0
-     * 4. Call list.get(0) → return first element
+     * <p><b>List with NEGATIVE index (Python-style!):</b>
+     * <pre>{@code
+     * last = items[-1]      // Last element
+     * secondLast = items[-2] // Second-to-last element
+     * 
+     * How it works:
+     * items = ["a", "b", "c", "d"]
+     * items[-1] → items[4 + (-1)] → items[3] → "d"
+     * items[-2] → items[4 + (-2)] → items[2] → "c"
      * }</pre>
      * 
      * <p><b>Chained access:</b>
@@ -460,8 +466,23 @@ public class GrizzlyInterpreter {
         if (obj instanceof Map) {
             return ((Map<String, Object>) obj).get(key.toString());
         } else if (obj instanceof List) {
-            int index = Integer.parseInt(key.toString());
-            return ((List<?>) obj).get(index);
+            List<?> list = (List<?>) obj;
+            int index = ((Number) toNumber(key)).intValue();
+            
+            // Handle negative indices: -1 = last, -2 = second-to-last, etc.
+            if (index < 0) {
+                index = list.size() + index;
+            }
+            
+            // Bounds check
+            if (index < 0 || index >= list.size()) {
+                throw new GrizzlyExecutionException(
+                    "List index out of range: " + ((Number) toNumber(key)).intValue() + 
+                    " (list size: " + list.size() + ")"
+                );
+            }
+            
+            return list.get(index);
         }
         
         throw new GrizzlyExecutionException(
@@ -485,48 +506,29 @@ public class GrizzlyInterpreter {
     }
     
     /**
-     * Evaluate binary operations like +, ==, !=, <, >, etc.
+     * Evaluate binary operations: +, -, *, /, //, %, **, ==, !=, <, >, <=, >=
      * 
-     * <p><b>String concatenation (smart!):</b>
+     * <p><b>Smart behavior:</b>
+     * <ul>
+     *   <li>+ with strings → concatenation: {@code "Hi" + "!" = "Hi!"}</li>
+     *   <li>+ with lists → concatenation: {@code [1,2] + [3,4] = [1,2,3,4]}</li>
+     *   <li>+ with numbers → addition: {@code 5 + 3 = 8}</li>
+     *   <li>* with string and number → repetition: {@code 3 * "ha" = "hahaha"}</li>
+     *   <li>* with list and number → repetition: {@code 2 * [1,2] = [1,2,1,2]}</li>
+     *   <li>* with numbers → multiplication: {@code 5 * 3 = 15}</li>
+     * </ul>
+     * 
+     * <p><b>Math examples:</b>
      * <pre>{@code
-     * result = "Hello" + " " + "World"
-     * 
-     * Process:
-     * 1. See operator is +
-     * 2. Check if either side is a string
-     * 3. Convert both to strings: "Hello" + " "
-     * 4. Concatenate: "Hello "
-     * 5. Then: "Hello " + "World" = "Hello World"
+     * 2 + 3 * 4    → 14 (precedence handled by parser)
+     * 10 - 5       → 5
+     * 8 / 5        → 1.6 (division always returns float)
+     * 17 // 3      → 5 (floor division)
+     * 17 % 3       → 2 (remainder)
+     * 5 ** 2       → 25 (power)
      * }</pre>
      * 
-     * <p><b>Number addition:</b>
-     * <pre>{@code
-     * sum = 10 + 20
-     * 
-     * Process:
-     * 1. Neither is string
-     * 2. Convert both to numbers: 10.0, 20.0
-     * 3. Add: 30.0
-     * }</pre>
-     * 
-     * <p><b>Comparisons:</b>
-     * <pre>{@code
-     * check = age >= 18
-     * 
-     * Process:
-     * 1. Convert both to numbers
-     * 2. Compare: 25.0 >= 18.0
-     * 3. Return: true
-     * }</pre>
-     * 
-     * <p><b>Equality (smart matching!):</b>
-     * <pre>{@code
-     * same = "5" == 5        // true (both convert to same value)
-     * same = null == null    // true
-     * same = "a" == "a"      // true
-     * }</pre>
-     * 
-     * @param binaryOp The BinaryOp AST node (left, operator, right)
+     * @param binaryOp The BinaryOp AST node
      * @param context Execution context
      * @return Result of the operation
      */
@@ -537,17 +539,78 @@ public class GrizzlyInterpreter {
         String operator = binaryOp.operator();
         
         return switch (operator) {
-            case "+" -> {
-                if (left instanceof String || right instanceof String) {
-                    yield left.toString() + right.toString();
-                }
-                yield evaluateNumericOp(left, right, operator);
-            }
+            case "+" -> evaluatePlus(left, right);
+            case "-" -> evaluateNumericOp(left, right, "-");
+            case "*" -> evaluateStar(left, right);
+            case "/" -> evaluateNumericOp(left, right, "/");
+            case "//" -> evaluateNumericOp(left, right, "//");
+            case "%" -> evaluateNumericOp(left, right, "%");
+            case "**" -> evaluateNumericOp(left, right, "**");
             case "==" -> java.util.Objects.equals(left, right);
             case "!=" -> !java.util.Objects.equals(left, right);
             case "<", ">", "<=", ">=" -> evaluateComparison(left, right, operator);
             default -> throw new GrizzlyExecutionException("Unknown operator: " + operator);
         };
+    }
+    
+    /**
+     * Handle + operator: concatenation for strings/lists, addition for numbers
+     */
+    @SuppressWarnings("unchecked")
+    private Object evaluatePlus(Object left, Object right) {
+        // String concatenation
+        if (left instanceof String || right instanceof String) {
+            return left.toString() + right.toString();
+        }
+        
+        // List concatenation: [1,2] + [3,4] = [1,2,3,4]
+        if (left instanceof List && right instanceof List) {
+            List<Object> result = new ArrayList<>((List<?>) left);
+            result.addAll((List<?>) right);
+            return result;
+        }
+        
+        // Numeric addition
+        return evaluateNumericOp(left, right, "+");
+    }
+    
+    /**
+     * Handle * operator: repetition for strings/lists, multiplication for numbers
+     */
+    @SuppressWarnings("unchecked")
+    private Object evaluateStar(Object left, Object right) {
+        // String repetition: 3 * "ha" = "hahaha"
+        if (left instanceof Number && right instanceof String) {
+            int count = ((Number) left).intValue();
+            return ((String) right).repeat(Math.max(0, count));
+        }
+        if (left instanceof String && right instanceof Number) {
+            int count = ((Number) right).intValue();
+            return ((String) left).repeat(Math.max(0, count));
+        }
+        
+        // List repetition: 2 * [1,2] = [1,2,1,2]
+        if (left instanceof Number && right instanceof List) {
+            int count = ((Number) left).intValue();
+            List<Object> list = (List<Object>) right;
+            List<Object> result = new ArrayList<>();
+            for (int i = 0; i < Math.max(0, count); i++) {
+                result.addAll(list);
+            }
+            return result;
+        }
+        if (left instanceof List && right instanceof Number) {
+            int count = ((Number) right).intValue();
+            List<Object> list = (List<Object>) left;
+            List<Object> result = new ArrayList<>();
+            for (int i = 0; i < Math.max(0, count); i++) {
+                result.addAll(list);
+            }
+            return result;
+        }
+        
+        // Numeric multiplication
+        return evaluateNumericOp(left, right, "*");
     }
     
     /**
@@ -725,7 +788,6 @@ public class GrizzlyInterpreter {
         return executeFunction(func, funcContext);
     }
     
-    @SuppressWarnings("unchecked")
     /**
      * Set a value to a target expression (variable, dict key, or attribute).
      * 
@@ -765,6 +827,7 @@ public class GrizzlyInterpreter {
      * @param value What value to assign
      * @param context Execution context for variable storage
      */
+    @SuppressWarnings("unchecked")
     private void setTarget(Expression target, Object value, ExecutionContext context) {
         switch (target) {
             case Identifier i -> context.set(i.name(), value);
@@ -783,8 +846,23 @@ public class GrizzlyInterpreter {
                 } else if (obj instanceof Map) {
                     ((Map<String, Object>) obj).put(key.toString(), value);
                 } else if (obj instanceof List) {
-                    int index = Integer.parseInt(key.toString());
-                    ((List<Object>) obj).set(index, value);
+                    List<Object> list = (List<Object>) obj;
+                    int index = ((Number) toNumber(key)).intValue();
+                    
+                    // Handle negative indices
+                    if (index < 0) {
+                        index = list.size() + index;
+                    }
+                    
+                    // Bounds check
+                    if (index < 0 || index >= list.size()) {
+                        throw new GrizzlyExecutionException(
+                            "List index out of range: " + ((Number) toNumber(key)).intValue() + 
+                            " (list size: " + list.size() + ")"
+                        );
+                    }
+                    
+                    list.set(index, value);
                 } else {
                     throw new GrizzlyExecutionException(
                         "Cannot set key on object of type " + 
@@ -825,7 +903,10 @@ public class GrizzlyInterpreter {
             case "+" -> l + r;
             case "-" -> l - r;
             case "*" -> l * r;
-            case "/" -> l / r;
+            case "/" -> l / r;  // Always returns double (Python behavior)
+            case "//" -> Math.floor(l / r);  // Floor division
+            case "%" -> l % r;  // Modulo/remainder
+            case "**" -> Math.pow(l, r);  // Power
             default -> throw new GrizzlyExecutionException("Unknown numeric operator: " + operator);
         };
     }

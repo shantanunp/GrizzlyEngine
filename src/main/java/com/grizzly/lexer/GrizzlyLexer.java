@@ -547,6 +547,10 @@ public class GrizzlyLexer {
             case '.' -> addTokenAndAdvance(TokenType.DOT);
             case ':' -> addTokenAndAdvance(TokenType.COLON);
             case '+' -> addTokenAndAdvance(TokenType.PLUS);
+            case '-' -> addTokenAndAdvance(TokenType.MINUS);
+            case '%' -> addTokenAndAdvance(TokenType.PERCENT);
+            case '*' -> tokenizeStar();      // * or **
+            case '/' -> tokenizeSlash();     // / or //
             case '=' -> tokenizeEquals();
             case '!' -> tokenizeNotEquals();
             case '<' -> tokenizeLessThan();
@@ -600,6 +604,30 @@ public class GrizzlyLexer {
             addTokenAndAdvance(TokenType.GE);
         } else {
             addToken(TokenType.GT);
+        }
+    }
+    
+    /**
+     * Tokenize * or **
+     */
+    private void tokenizeStar() {
+        advance();
+        if (currentChar() == '*') {
+            addTokenAndAdvance(TokenType.DOUBLESTAR);
+        } else {
+            addToken(TokenType.STAR);
+        }
+    }
+    
+    /**
+     * Tokenize / or //
+     */
+    private void tokenizeSlash() {
+        advance();
+        if (currentChar() == '/') {
+            addTokenAndAdvance(TokenType.DOUBLESLASH);
+        } else {
+            addToken(TokenType.SLASH);
         }
     }
     

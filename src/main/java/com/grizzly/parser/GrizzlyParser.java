@@ -401,64 +401,110 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse comparison (for if conditions)
+     * Parse an expression with proper operator precedence.
+     * 
+     * <p>Precedence (lowest to highest):
+     * <ol>
+     *   <li>Comparison: ==, !=, <, >, <=, >=</li>
+     *   <li>Addition/Subtraction: +, -</li>
+     *   <li>Multiplication/Division: *, /, //, %</li>
+     *   <li>Power: **</li>
+     * </ol>
+     * 
+     * <p><b>Examples:</b>
+     * <pre>{@code
+     * 2 + 3 * 4        → 2 + (3 * 4) = 14  (not 20!)
+     * 5 ** 2 + 1       → (5 ** 2) + 1 = 26
+     * 10 - 2 * 3       → 10 - (2 * 3) = 4
+     * "a" + "b" + "c"  → (("a" + "b") + "c") = "abc"
+     * }</pre>
+     * 
+     * @return Expression AST node with proper precedence
      */
+    private Expression parseExpression() {
+        return parseComparison();
+    }
+    
     private Expression parseComparison() {
-        Expression left = parseExpression();
+        Expression left = parseAddition();
         
-        TokenType type = peek().type();
-        if (type == TokenType.EQ || type == TokenType.NE || 
-            type == TokenType.LT || type == TokenType.GT ||
-            type == TokenType.LE || type == TokenType.GE) {
-            
-            String operator = peek().value() != null ? peek().value() : 
-                switch (type) {
-                    case EQ -> "==";
-                    case NE -> "!=";
-                    case LT -> "<";
-                    case GT -> ">";
-                    case LE -> "<=";
-                    case GE -> ">=";
-                    default -> "==";
-                };
-            advance();
-            Expression right = parseExpression();
-            return new BinaryOp(left, operator, right);
+        while (true) {
+            TokenType op = peek().type();
+            if (op == TokenType.EQ || op == TokenType.NE || 
+                op == TokenType.LT || op == TokenType.GT ||
+                op == TokenType.LE || op == TokenType.GE) {
+                advance();
+                Expression right = parseAddition();
+                left = new BinaryOp(left, tokenTypeToOp(op), right);
+            } else {
+                break;
+            }
         }
         
         return left;
     }
     
-    /**
-     * Parse an expression with binary operators (currently supports + for concatenation).
-     * 
-     * <p>Handles left-to-right associativity for operators.
-     * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * x = INPUT.value                                  // Simple expression
-     * fullName = firstName + " " + lastName           // String concatenation
-     * result = "A" + "B" + "C"                        // Multiple operations (left-to-right)
-     * }</pre>
-     * 
-     * <p>Parse tree for {@code "A" + "B" + "C"}:
-     * <pre>
-     * BinaryOp(BinaryOp("A", +, "B"), +, "C") → Result: "ABC"
-     * </pre>
-     * 
-     * @return Expression AST node, possibly wrapped in BinaryOp nodes
-     */
-    private Expression parseExpression() {
-        Expression left = parsePrimary();
+    private Expression parseAddition() {
+        Expression left = parseMultiplication();
         
-        // Handle + operator for string concatenation
-        while (peek().type() == TokenType.PLUS) {
-            advance(); // consume +
-            Expression right = parsePrimary();
-            left = new BinaryOp(left, "+", right);
+        while (peek().type() == TokenType.PLUS || peek().type() == TokenType.MINUS) {
+            TokenType op = peek().type();
+            advance();
+            Expression right = parseMultiplication();
+            left = new BinaryOp(left, tokenTypeToOp(op), right);
         }
         
         return left;
+    }
+    
+    private Expression parseMultiplication() {
+        Expression left = parsePower();
+        
+        while (true) {
+            TokenType op = peek().type();
+            if (op == TokenType.STAR || op == TokenType.SLASH || 
+                op == TokenType.DOUBLESLASH || op == TokenType.PERCENT) {
+                advance();
+                Expression right = parsePower();
+                left = new BinaryOp(left, tokenTypeToOp(op), right);
+            } else {
+                break;
+            }
+        }
+        
+        return left;
+    }
+    
+    private Expression parsePower() {
+        Expression left = parsePrimary();
+        
+        // ** is right-associative: 2 ** 3 ** 2 = 2 ** (3 ** 2) = 512
+        if (peek().type() == TokenType.DOUBLESTAR) {
+            advance();
+            Expression right = parsePower();  // Recursive for right-associativity
+            return new BinaryOp(left, "**", right);
+        }
+        
+        return left;
+    }
+    
+    private String tokenTypeToOp(TokenType type) {
+        return switch (type) {
+            case PLUS -> "+";
+            case MINUS -> "-";
+            case STAR -> "*";
+            case SLASH -> "/";
+            case DOUBLESLASH -> "//";
+            case PERCENT -> "%";
+            case DOUBLESTAR -> "**";
+            case EQ -> "==";
+            case NE -> "!=";
+            case LT -> "<";
+            case GT -> ">";
+            case LE -> "<=";
+            case GE -> ">=";
+            default -> throw new GrizzlyParseException("Unknown operator: " + type);
+        };
     }
     
     /**
