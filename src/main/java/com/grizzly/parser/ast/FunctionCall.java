@@ -3,4 +3,5 @@ package com.grizzly.parser.ast;
 import java.util.List;
 
 public record FunctionCall(String functionName, List<Expression> args, int lineNumber) implements Statement {
+    // Record automatically provides lineNumber() accessor
 }

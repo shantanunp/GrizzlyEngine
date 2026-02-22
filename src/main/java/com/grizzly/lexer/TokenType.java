@@ -9,6 +9,8 @@ public enum TokenType {
     IF,         // if
     ELSE,       // else
     RETURN,     // return
+    FOR,        // for
+    IN,         // in
     
     // Literals
     IDENTIFIER, // variable names, function names
@@ -17,6 +19,7 @@ public enum TokenType {
     
     // Operators
     ASSIGN,     // =
+    PLUS,       // +
     EQ,         // ==
     NE,         // !=
     LT,         // <

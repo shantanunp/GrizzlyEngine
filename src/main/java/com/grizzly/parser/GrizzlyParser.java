@@ -107,55 +107,27 @@ public class GrizzlyParser {
     /**
      * Parse an indented block of statements
      */
-    /**
-     * Parse an indented block of statements (function body).
-     *
-     * <p>A block is a sequence of statements at the same indentation level.
-     * The block ends when we encounter:
-     * <ul>
-     *   <li>DEDENT token - returning to outer indentation level</li>
-     *   <li>DEF token - start of a new function definition</li>
-     *   <li>EOF token - end of file</li>
-     * </ul>
-     *
-     * <p><b>Example:</b>
-     * <pre>{@code
-     * def transform(INPUT):
-     *     OUTPUT = {}        ← Block starts (after INDENT)
-     *     x = 1             ← Part of block
-     *     return OUTPUT     ← Part of block
-     *                       ← DEDENT here - block ends
-     * def helper():         ← New function (DEF)
-     * }</pre>
-     *
-     * @return List of statements in the block
-     */
     private List<Statement> parseBlock() {
         List<Statement> statements = new ArrayList<>();
-
+        
         while (!isAtEnd()) {
             TokenType type = peek().type();
-
-            // Stop at end of block (DEDENT), next function (DEF), or end of file
-            if (type == TokenType.DEDENT || type == TokenType.DEF || type == TokenType.EOF) {
+            
+            // Stop at next function definition or EOF
+            if (type == TokenType.DEF || type == TokenType.EOF) {
                 break;
             }
-
-            // Skip newlines and extra indents
-            if (type == TokenType.NEWLINE || type == TokenType.INDENT) {
+            
+            // Skip newlines and dedents
+            if (type == TokenType.NEWLINE || type == TokenType.DEDENT || type == TokenType.INDENT) {
                 advance();
                 continue;
             }
-
+            
             statements.add(parseStatement());
             skipNewlines();
         }
-
-        // Consume the DEDENT token if present (clean up for next block)
-        if (peek().type() == TokenType.DEDENT) {
-            advance();
-        }
-
+        
         return statements;
     }
     
@@ -175,6 +147,11 @@ public class GrizzlyParser {
         // If statement
         if (peek().type() == TokenType.IF) {
             return parseIfStatement();
+        }
+        
+        // For loop
+        if (peek().type() == TokenType.FOR) {
+            return parseForLoop();
         }
         
         // Check for function call (identifier followed by '(')
@@ -206,8 +183,14 @@ public class GrizzlyParser {
             }
         }
         
-        // Assignment
+        // Try to parse as expression (might be assignment or method call)
         Expression expr = parseExpression();
+        
+        // Check if it's a method call expression (like list.append())
+        if (expr instanceof MethodCall) {
+            // Wrap it in an ExpressionStatement
+            return new ExpressionStatement(expr, lineNumber);
+        }
         
         // Check if it's an assignment
         if (peek().type() == TokenType.ASSIGN) {
@@ -305,6 +288,119 @@ public class GrizzlyParser {
     }
     
     /**
+     * Parse a for loop statement: {@code for item in items:}
+     * 
+     * <p>A for loop iterates over an iterable expression (typically a list) and executes
+     * a block of statements for each element.
+     * 
+     * <p><b>Example 1 - Simple iteration:</b>
+     * <pre>{@code
+     * for customer in INPUT.customers:
+     *     OUTPUT["names"].append(customer.name)
+     * }</pre>
+     * 
+     * <p><b>Example 2 - With conditional:</b>
+     * <pre>{@code
+     * for person in INPUT.people:
+     *     if person.age >= 18:
+     *         OUTPUT["adults"].append(person.name)
+     * }</pre>
+     * 
+     * <p><b>Token sequence expected:</b>
+     * FOR → IDENTIFIER → IN → Expression → COLON → NEWLINE → INDENT → Body → DEDENT
+     * 
+     * @return ForLoop AST node containing variable name, iterable expression, and body statements
+     * @throws GrizzlyParseException if syntax is invalid or loop body is empty
+     */
+    private ForLoop parseForLoop() {
+        int lineNumber = peek().line();
+        
+        expect(TokenType.FOR, "Expected 'for'");
+        
+        // Get loop variable name
+        String variable = expect(TokenType.IDENTIFIER, "Expected variable name").value();
+        
+        expect(TokenType.IN, "Expected 'in'");
+        
+        // Parse iterable expression
+        Expression iterable = parseExpression();
+        
+        expect(TokenType.COLON, "Expected ':' after for statement");
+        skipNewlines();
+        
+        // Skip INDENT if present
+        if (peek().type() == TokenType.INDENT) {
+            advance();
+        }
+        
+        // Parse loop body
+        List<Statement> body = parseForBlock();
+        
+        if (body.isEmpty()) {
+            throw new GrizzlyParseException(
+                "'for' loop body cannot be empty at line " + lineNumber,
+                lineNumber,
+                1
+            );
+        }
+        
+        return new ForLoop(variable, iterable, body, lineNumber);
+    }
+    
+    /**
+     * Parse the body of a for loop.
+     * 
+     * <p>A for loop body is a sequence of indented statements that execute for each
+     * iteration. Unlike {@code parseIfBlock()}, this does NOT stop at IF tokens
+     * because if statements are valid inside for loops.
+     * 
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * for customer in INPUT.customers:
+     *     user = {}                    ← Assignment
+     *     if customer.age >= 18:       ← If statement (NOT a block terminator!)
+     *         user["status"] = "adult"
+     *     OUTPUT["users"].append(user) ← Method call
+     * ← DEDENT here - block ends
+     * }</pre>
+     * 
+     * <p><b>Stopping conditions:</b>
+     * DEDENT (end of indentation), FOR (next loop), DEF (new function), or EOF
+     * 
+     * @return List of statements in the for loop body
+     */
+    private List<Statement> parseForBlock() {
+        List<Statement> statements = new ArrayList<>();
+        
+        while (!isAtEnd()) {
+            TokenType type = peek().type();
+            
+            // Stop at dedent, next for/def, or EOF
+            // NOTE: Don't stop at IF - it's a statement inside the loop!
+            if (type == TokenType.DEDENT || type == TokenType.FOR || 
+                type == TokenType.DEF || type == TokenType.EOF) {
+                break;
+            }
+            
+            // Skip newlines and indents
+            if (type == TokenType.NEWLINE || type == TokenType.INDENT) {
+                advance();
+                continue;
+            }
+            
+            statements.add(parseStatement());
+            skipNewlines();
+        }
+        
+        // Consume trailing DEDENT if present
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+        
+        return statements;
+    }
+    
+    /**
      * Parse comparison (for if conditions)
      */
     private Expression parseComparison() {
@@ -334,14 +430,136 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse an expression
+     * Parse an expression with binary operators (currently supports + for concatenation).
+     * 
+     * <p>Handles left-to-right associativity for operators.
+     * 
+     * <p><b>Examples:</b>
+     * <pre>{@code
+     * x = INPUT.value                                  // Simple expression
+     * fullName = firstName + " " + lastName           // String concatenation
+     * result = "A" + "B" + "C"                        // Multiple operations (left-to-right)
+     * }</pre>
+     * 
+     * <p>Parse tree for {@code "A" + "B" + "C"}:
+     * <pre>
+     * BinaryOp(BinaryOp("A", +, "B"), +, "C") → Result: "ABC"
+     * </pre>
+     * 
+     * @return Expression AST node, possibly wrapped in BinaryOp nodes
      */
     private Expression parseExpression() {
-        return parsePrimary();
+        Expression left = parsePrimary();
+        
+        // Handle + operator for string concatenation
+        while (peek().type() == TokenType.PLUS) {
+            advance(); // consume +
+            Expression right = parsePrimary();
+            left = new BinaryOp(left, "+", right);
+        }
+        
+        return left;
     }
     
     /**
      * Parse primary expressions (identifiers, literals, dict/attr access)
+     */
+    /**
+     * Parse the most basic expressions and chain them together.
+     * 
+     * <p><b>What's a "primary" expression?</b> The simplest building blocks:
+     * <ul>
+     *   <li>Literals: {@code "hello"}, {@code 42}, {@code []}, {@code {}}</li>
+     *   <li>Variables: {@code x}, {@code INPUT}, {@code OUTPUT}</li>
+     * </ul>
+     * 
+     * <p><b>The magic: Chaining!</b> After getting a basic expression, we can chain more:
+     * <pre>{@code
+     * INPUT.user.address.city
+     * ^^^^^  dot   dot    dot
+     * Start  |     |      |
+     *    Attribute chains keep going!
+     * 
+     * OUTPUT["users"][0].name
+     * ^^^^^^   [  ]  [ ] dot
+     * Start  Dict List Attr
+     *        access access access
+     * }</pre>
+     * 
+     * <p><b>Example 1 - Simple identifier:</b>
+     * <pre>{@code
+     * x
+     * 
+     * Parse: See IDENTIFIER "x"
+     * Return: Identifier("x")
+     * Done!
+     * }</pre>
+     * 
+     * <p><b>Example 2 - Attribute access:</b>
+     * <pre>{@code
+     * INPUT.name
+     * 
+     * Parse:
+     * 1. See IDENTIFIER "INPUT" → create Identifier("INPUT")
+     * 2. See DOT → continue chaining
+     * 3. See IDENTIFIER "name" → wrap in AttrAccess
+     * 4. No more dots/brackets → done
+     * 
+     * Return: AttrAccess(Identifier("INPUT"), "name")
+     * }</pre>
+     * 
+     * <p><b>Example 3 - Dict access:</b>
+     * <pre>{@code
+     * OUTPUT["key"]
+     * 
+     * Parse:
+     * 1. See IDENTIFIER "OUTPUT" → Identifier("OUTPUT")
+     * 2. See LBRACKET → continue chaining
+     * 3. Parse "key" expression → StringLiteral("key")
+     * 4. See RBRACKET → close bracket
+     * 5. Wrap in DictAccess
+     * 
+     * Return: DictAccess(Identifier("OUTPUT"), StringLiteral("key"))
+     * }</pre>
+     * 
+     * <p><b>Example 4 - Method call:</b>
+     * <pre>{@code
+     * items.append(value)
+     * 
+     * Parse:
+     * 1. See IDENTIFIER "items" → Identifier("items")
+     * 2. See DOT → continue chaining
+     * 3. See IDENTIFIER "append"
+     * 4. See LPAREN → this is a method call!
+     * 5. Parse arguments: value
+     * 6. See RPAREN → close
+     * 7. Wrap in MethodCall
+     * 
+     * Return: MethodCall(Identifier("items"), "append", [Identifier("value")])
+     * }</pre>
+     * 
+     * <p><b>Example 5 - Complex chaining:</b>
+     * <pre>{@code
+     * INPUT.users[0].name.upper()
+     * 
+     * Parse steps:
+     * 1. INPUT → Identifier("INPUT")
+     * 2. .users → AttrAccess(prev, "users")
+     * 3. [0] → DictAccess(prev, NumberLiteral("0"))
+     * 4. .name → AttrAccess(prev, "name")
+     * 5. .upper() → MethodCall(prev, "upper", [])
+     * 
+     * Each step wraps the previous result!
+     * }</pre>
+     * 
+     * <p><b>The loop:</b> Keep chaining while we see:
+     * <ul>
+     *   <li>{@code [} → Dict/list access</li>
+     *   <li>{@code .} → Attribute or method</li>
+     *   <li>{@code (} → Function call</li>
+     * </ul>
+     * 
+     * @return Expression (could be Identifier, AttrAccess, DictAccess, MethodCall, etc.)
      */
     private Expression parsePrimary() {
         Token token = peek();
@@ -365,28 +583,57 @@ public class GrizzlyParser {
             return new DictLiteral();
         }
         
+        // List literal: [] or [1, 2, 3]
+        if (token.type() == TokenType.LBRACKET) {
+            return parseListLiteral();
+        }
+        
         // Identifier (variable name)
         if (token.type() == TokenType.IDENTIFIER) {
             String name = token.value();
             advance();
             Expression expr = new Identifier(name);
             
-            // Check for dict access or attribute access
+            // Check for dict access, list access, attribute access, or method call
             while (true) {
                 if (peek().type() == TokenType.LBRACKET) {
-                    // Dict access: OUTPUT["key"]
+                    // Could be dict access or list access: obj["key"] or list[0]
                     advance();
                     Expression key = parseExpression();
                     expect(TokenType.RBRACKET, "Expected ']'");
+                    
+                    // Use DictAccess for now (works for both dict and list)
                     expr = new DictAccess(expr, key);
+                    
                 } else if (peek().type() == TokenType.DOT) {
-                    // Attribute access: INPUT.customerId
+                    // Could be attribute access or method call
                     advance();
                     String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").value();
-                    expr = new AttrAccess(expr, attr);
+                    
+                    // Check if it's a method call
+                    if (peek().type() == TokenType.LPAREN) {
+                        advance(); // Skip '('
+                        List<Expression> args = new ArrayList<>();
+                        
+                        if (peek().type() != TokenType.RPAREN) {
+                            do {
+                                args.add(parseExpression());
+                                if (peek().type() == TokenType.COMMA) {
+                                    advance();
+                                }
+                            } while (peek().type() != TokenType.RPAREN);
+                        }
+                        
+                        expect(TokenType.RPAREN, "Expected ')'");
+                        expr = new MethodCall(expr, attr, args);
+                    } else {
+                        // Regular attribute access
+                        expr = new AttrAccess(expr, attr);
+                    }
+                    
                 } else if (peek().type() == TokenType.LPAREN) {
-                    // Function call: func(args)
-                    advance();
+                    // Function call expression: len(items), helper(x)
+                    advance(); // Skip '('
                     List<Expression> args = new ArrayList<>();
                     
                     if (peek().type() != TokenType.RPAREN) {
@@ -400,11 +647,8 @@ public class GrizzlyParser {
                     
                     expect(TokenType.RPAREN, "Expected ')'");
                     
-                    // Return as a FunctionCall statement wrapped in an expression context
-                    // For now, we'll handle this differently
-                    // Actually, we need to create a FunctionCall node, but it's a Statement not Expression
-                    // Let's handle this case in parseStatement instead
-                    break;
+                    // Return as FunctionCallExpression
+                    return new FunctionCallExpression(name, args);
                 } else {
                     break;
                 }
@@ -414,6 +658,44 @@ public class GrizzlyParser {
         }
         
         throw new GrizzlyParseException("Unexpected token: " + token, token.line(), token.column());
+    }
+    
+    /**
+     * Parse a list literal expression: {@code []} or {@code [1, 2, 3]}.
+     * 
+     * <p>List literals create new list objects with zero or more initial elements.
+     * 
+     * <p><b>Examples:</b>
+     * <pre>{@code
+     * items = []                           // Empty list
+     * numbers = [1, 2, 3]                  // List with literals
+     * ids = [INPUT.id1, INPUT.id2]         // List with expressions
+     * mixed = [1, "hello", INPUT.value]    // Mixed types
+     * }</pre>
+     * 
+     * <p><b>Token sequence:</b>
+     * LBRACKET → [Expression → COMMA → Expression → ...] → RBRACKET
+     * 
+     * @return ListLiteral AST node containing list of element expressions
+     * @throws GrizzlyParseException if syntax is invalid
+     */
+    private ListLiteral parseListLiteral() {
+        expect(TokenType.LBRACKET, "Expected '['");
+        
+        List<Expression> elements = new ArrayList<>();
+        
+        if (peek().type() != TokenType.RBRACKET) {
+            do {
+                elements.add(parseExpression());
+                if (peek().type() == TokenType.COMMA) {
+                    advance();
+                }
+            } while (peek().type() != TokenType.RBRACKET);
+        }
+        
+        expect(TokenType.RBRACKET, "Expected ']'");
+        
+        return new ListLiteral(elements);
     }
     
     // === Helper methods ===
