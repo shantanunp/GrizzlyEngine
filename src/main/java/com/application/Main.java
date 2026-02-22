@@ -109,13 +109,6 @@ public class Main {
         long lineCount = template.lines().count();
         System.out.println("   ✓ Loaded " + lineCount + " lines");
 
-        // Show first function name
-        String firstLine = template.lines().filter(l -> l.trim().startsWith("def ")).findFirst().orElse("");
-        if (!firstLine.isEmpty()) {
-            String funcName = firstLine.substring(firstLine.indexOf("def ") + 4, firstLine.indexOf("("));
-            System.out.println("   Function: " + funcName + "()");
-        }
-
         // 3. Compile template
         System.out.println();
         System.out.println("🔨 Compiling template...");
