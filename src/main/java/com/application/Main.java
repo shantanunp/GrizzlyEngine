@@ -28,6 +28,7 @@ public class Main {
     // File names (in current directory)
     private static final String INPUT_FILE = "examples/customer_input.json";
     private static final String TEMPLATE_FILE = "examples/customer_transform.py";
+    private static final String OUTPUT_FILE = "examples/output.json";             // Same (root)
 
     public static void main(String[] args) {
         try {
@@ -44,6 +45,7 @@ public class Main {
             // Success!
             System.out.println();
             System.out.println("✅ Transformation complete!");
+            Files.writeString(Path.of(OUTPUT_FILE), result);
             System.out.println(result);
             System.out.println();
 
