@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grizzly.core.GrizzlyEngine;
 import com.grizzly.core.GrizzlyTemplate;
 import com.grizzly.core.logging.GrizzlyLogger;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -12,43 +13,39 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * Main class for Grizzly Engine - Transform JSON using Python-like templates
- * 
+ * MainApplicationTest class for Grizzly Engine - Transform JSON using Python-like templates
+ * <p>
  * NO COMMAND LINE ARGUMENTS NEEDED!
  * Just put your files in the right place and run:
- *   java -jar grizzly.jar
- * 
+ * java -jar grizzly.jar
+ * <p>
  * Required folder structure:
- *   examples/
- *   ├── input.json      (your input data)
- *   └── transform.py    (your transformation template)
- * 
+ * examples/
+ * ├── input.json      (your input data)
+ * └── transform.py    (your transformation template)
+ * <p>
  * Output:
- *   - output.json       (transformed result, in current directory)
+ * - output.json       (transformed result, in current directory)
  */
-public class Main {
-    
+public class MainApplicationTest {
+
     private static final String INPUT_FILE = "examples/input.json";
     private static final String TEMPLATE_FILE = "examples/transform.py";
     private static final String OUTPUT_FILE = "examples/output.json";
-    
-    public static void main(String[] args) {
+
+    @Test
+    public void testEmptyList() throws Exception {
         try {
-            // Enable debug logging to see Lexer/Parser/Interpreter details
-            // Options: TRACE (most verbose), DEBUG, INFO, WARN, ERROR, OFF
-            GrizzlyLogger.setLevel(GrizzlyLogger.LogLevel.DEBUG);
-            
-            System.out.println("Grizzly Engine - Data Transformation");
-            System.out.println("=====================================");
-            System.out.println();
+            GrizzlyLogger.info("MainApplicationTest", "Grizzly Engine - Data Transformation");
+            GrizzlyLogger.info("MainApplicationTest", "=====================================");
 
             String result = transform();
-            
-            Files.writeString(Path.of(OUTPUT_FILE), result);
-            
-            System.out.println();
-            System.out.println("Transformation complete!");
-            System.out.println("Output written to: " + OUTPUT_FILE);
+            GrizzlyLogger.info("MainApplicationTest", result);
+
+//          Files.writeString(Path.of(OUTPUT_FILE), result);
+
+            GrizzlyLogger.info("MainApplicationTest", "Transformation complete!");
+            GrizzlyLogger.info("MainApplicationTest", "Output written to: " + OUTPUT_FILE);
 
         } catch (Exception e) {
             System.err.println();
@@ -58,38 +55,39 @@ public class Main {
             System.exit(1);
         }
     }
-    
+
     /**
      * Transform JSON using template
-     * 
+     *
      * @return Transformed JSON as string
      */
     public static String transform() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        
-        System.out.println("Reading input data...");
+
+        GrizzlyLogger.info("MainApplicationTest", "Reading input data...");
         Map<String, Object> inputData = mapper.readValue(
-            new File(INPUT_FILE), 
-            new TypeReference<Map<String, Object>>() {}
+                new File(INPUT_FILE),
+                new TypeReference<Map<String, Object>>() {
+                }
         );
-        
-        System.out.println("Reading template...");
+
+        GrizzlyLogger.info("MainApplicationTest", "Reading template...");
         String template = Files.readString(Path.of(TEMPLATE_FILE));
-        
-        System.out.println("Compiling template...");
+
+        GrizzlyLogger.info("MainApplicationTest", "Compiling template...");
         GrizzlyEngine engine = new GrizzlyEngine();
         long startCompile = System.currentTimeMillis();
         GrizzlyTemplate compiledTemplate = engine.compile(template);
         long compileTime = System.currentTimeMillis() - startCompile;
-        System.out.println("   Compiled in " + compileTime + "ms");
-        
-        System.out.println("Executing transformation...");
+        GrizzlyLogger.info("MainApplicationTest", "   Compiled in " + compileTime + "ms");
+
+        GrizzlyLogger.info("MainApplicationTest", "Executing transformation...");
         long startExec = System.currentTimeMillis();
         Map<String, Object> outputData = compiledTemplate.executeRaw(inputData);
         long execTime = System.currentTimeMillis() - startExec;
-        System.out.println("   Executed in " + execTime + "ms");
-        System.out.println("   Generated " + outputData.size() + " fields");
-        
+        GrizzlyLogger.info("MainApplicationTest", "   Executed in " + execTime + "ms");
+        GrizzlyLogger.info("MainApplicationTest", "   Generated " + outputData.size() + " fields");
+
         String outputJson = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(outputData);
         return outputJson;
     }

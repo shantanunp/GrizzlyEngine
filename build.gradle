@@ -15,8 +15,11 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.16.1'
     
-    // SLF4J for logging
+    // SLF4J for logging (API only - clients provide their own implementation)
     implementation 'org.slf4j:slf4j-api:2.0.11'
+    
+    // SLF4J Simple for local testing/running ONLY (not included in published JAR)
+    testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.11'
 
     // Testing - JUnit Platform
     testImplementation platform('org.junit:junit-bom:5.10.1')
