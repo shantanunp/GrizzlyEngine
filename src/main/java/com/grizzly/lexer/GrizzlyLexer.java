@@ -32,7 +32,10 @@ public class GrizzlyLexer {
         Map.entry("true", TokenType.TRUE),
         Map.entry("false", TokenType.FALSE),
         Map.entry("import", TokenType.IMPORT),
-        Map.entry("from", TokenType.FROM)
+        Map.entry("from", TokenType.FROM),
+        Map.entry("and", TokenType.AND),
+        Map.entry("or", TokenType.OR),
+        Map.entry("not", TokenType.NOT)
     );
     
     // Constants

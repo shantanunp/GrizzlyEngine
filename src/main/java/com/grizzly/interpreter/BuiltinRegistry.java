@@ -8,13 +8,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.grizzly.interpreter.ValueUtils.*;
+
 /**
  * Registry for all built-in functions available in Grizzly templates.
  * 
  * <p>Organizes builtins by category for maintainability:
  * <ul>
- *   <li>Core: len, range, str</li>
- *   <li>DateTime: now, parseDate, formatDate, addDays, etc.</li>
+ *   <li>Core: len, range, str, int, float, bool, abs, min, max, sum</li>
+ *   <li>DateTime: now, parseDate, formatDate, addDays, addMonths, etc.</li>
  *   <li>Math: Decimal, round</li>
  * </ul>
  */
@@ -38,82 +40,6 @@ public final class BuiltinRegistry {
     
     public boolean contains(String name) {
         return functions.containsKey(name);
-    }
-    
-    // ==================== Argument Validation Helpers ====================
-    
-    private static void requireArgCount(String funcName, List<Value> args, int expected) {
-        if (args.size() != expected) {
-            throw new GrizzlyExecutionException(
-                funcName + "() takes exactly " + expected + " argument(s), got " + args.size()
-            );
-        }
-    }
-    
-    private static void requireArgCountRange(String funcName, List<Value> args, int min, int max) {
-        if (args.size() < min || args.size() > max) {
-            throw new GrizzlyExecutionException(
-                funcName + "() takes " + min + "-" + max + " arguments, got " + args.size()
-            );
-        }
-    }
-    
-    private static <T extends Value> T requireType(String funcName, Value value, Class<T> type, String argDesc) {
-        if (type.isInstance(value)) {
-            return type.cast(value);
-        }
-        throw new GrizzlyExecutionException(
-            funcName + "() " + argDesc + " must be a " + getTypeName(type) + ", got: " + value.typeName()
-        );
-    }
-    
-    private static String getTypeName(Class<? extends Value> type) {
-        if (type == StringValue.class) return "string";
-        if (type == NumberValue.class) return "number";
-        if (type == BoolValue.class) return "bool";
-        if (type == ListValue.class) return "list";
-        if (type == DictValue.class) return "dict";
-        if (type == DateTimeValue.class) return "datetime";
-        if (type == DecimalValue.class) return "decimal";
-        return type.getSimpleName();
-    }
-    
-    private static String asString(Value value) {
-        return switch (value) {
-            case StringValue s -> s.value();
-            case NumberValue n -> n.toString();
-            case BoolValue b -> b.toString();
-            case NullValue ignored -> "None";
-            default -> value.toString();
-        };
-    }
-    
-    private static int toInt(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asInt();
-            case StringValue s -> {
-                try {
-                    yield Integer.parseInt(s.value());
-                } catch (NumberFormatException e) {
-                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to integer");
-                }
-            }
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to integer");
-        };
-    }
-    
-    private static long toLong(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asLong();
-            case StringValue s -> {
-                try {
-                    yield Long.parseLong(s.value());
-                } catch (NumberFormatException e) {
-                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to long");
-                }
-            }
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to long");
-        };
     }
     
     // ==================== Core Functions ====================
@@ -341,16 +267,6 @@ public final class BuiltinRegistry {
             }
         }
         return max;
-    }
-    
-    private static double toDouble(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asDouble();
-            case DecimalValue d -> d.toDouble();
-            default -> throw new GrizzlyExecutionException(
-                "Cannot compare " + value.typeName() + " values"
-            );
-        };
     }
     
     // ==================== DateTime Functions ====================

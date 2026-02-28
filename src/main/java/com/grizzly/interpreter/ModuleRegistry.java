@@ -12,6 +12,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import static com.grizzly.interpreter.ValueUtils.*;
+
 /**
  * Registry for module functions (like Python's import system).
  * 
@@ -46,23 +48,6 @@ public final class ModuleRegistry {
     
     public Map<String, BuiltinFunction> getModule(String name) {
         return modules.get(name);
-    }
-    
-    // ==================== Helper Methods ====================
-    
-    private static void requireArgCount(String funcName, List<Value> args, int expected) {
-        if (args.size() != expected) {
-            throw new GrizzlyExecutionException(
-                funcName + " requires " + expected + " argument(s), got " + args.size()
-            );
-        }
-    }
-    
-    private static String asString(Value value) {
-        return switch (value) {
-            case StringValue s -> s.value();
-            default -> value.toString();
-        };
     }
     
     // ==================== RE Module ====================

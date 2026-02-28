@@ -18,6 +18,9 @@ public enum TokenType {
     FALSE,      // false
     IMPORT,     // import
     FROM,       // from (for future use)
+    AND,        // and
+    OR,         // or
+    NOT,        // not
     
     // Literals
     IDENTIFIER, // variable names, function names

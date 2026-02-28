@@ -371,19 +371,43 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse if/elif/else block (stops at ELIF, ELSE, DEDENT, DEF, or EOF)
-     * Note: Does NOT consume the DEDENT - caller must handle it
+     * Parse an indented block for if/elif/else (stops at ELIF, ELSE, DEDENT, DEF, or EOF).
+     * Does NOT consume the DEDENT - caller must handle it.
      */
     private List<Statement> parseIfBlock() {
+        return parseIndentedBlock(TokenType.ELIF, TokenType.ELSE);
+    }
+    
+    /**
+     * Parse an indented block for for loops (stops at DEDENT, DEF, or EOF).
+     * Does NOT consume the DEDENT - caller must handle it.
+     */
+    private List<Statement> parseForBlock() {
+        return parseIndentedBlock();
+    }
+    
+    /**
+     * Parse an indented block of statements until a terminator token is found.
+     * 
+     * @param extraTerminators Additional token types that should terminate the block
+     * @return List of parsed statements
+     */
+    private List<Statement> parseIndentedBlock(TokenType... extraTerminators) {
         List<Statement> statements = new ArrayList<>();
         
         while (!isAtEnd()) {
             TokenType type = peek().type();
             
-            // Stop at elif, else, dedent, next function, or EOF
-            if (type == TokenType.ELIF || type == TokenType.ELSE || type == TokenType.DEDENT || 
-                type == TokenType.DEF || type == TokenType.EOF) {
+            // Stop at standard terminators
+            if (type == TokenType.DEDENT || type == TokenType.EOF || type == TokenType.DEF) {
                 break;
+            }
+            
+            // Stop at extra terminators
+            for (TokenType terminator : extraTerminators) {
+                if (type == terminator) {
+                    return statements;
+                }
             }
             
             // Skip newlines and indents
@@ -396,58 +420,26 @@ public class GrizzlyParser {
             skipNewlines();
         }
         
-        // Do NOT consume DEDENT - let caller handle it
-        
         return statements;
     }
     
     /**
      * Parse a for loop statement: {@code for item in items:}
-     * 
-     * <p>A for loop iterates over an iterable expression (typically a list) and executes
-     * a block of statements for each element.
-     * 
-     * <p><b>Example 1 - Simple iteration:</b>
-     * <pre>{@code
-     * for customer in INPUT.customers:
-     *     OUTPUT["names"].append(customer.name)
-     * }</pre>
-     * 
-     * <p><b>Example 2 - With conditional:</b>
-     * <pre>{@code
-     * for person in INPUT.people:
-     *     if person.age >= 18:
-     *         OUTPUT["adults"].append(person.name)
-     * }</pre>
-     * 
-     * <p><b>Token sequence expected:</b>
-     * FOR → IDENTIFIER → IN → Expression → COLON → NEWLINE → INDENT → Body → DEDENT
-     * 
-     * @return ForLoop AST node containing variable name, iterable expression, and body statements
-     * @throws GrizzlyParseException if syntax is invalid or loop body is empty
      */
     private ForLoop parseForLoop() {
         int lineNumber = peek().line();
         
         expect(TokenType.FOR, "Expected 'for'");
-        
-        // Get loop variable name
         String variable = expect(TokenType.IDENTIFIER, "Expected variable name").value();
-        
         expect(TokenType.IN, "Expected 'in'");
-        
-        // Parse iterable expression
         Expression iterable = parseExpression();
-        
         expect(TokenType.COLON, "Expected ':' after for statement");
         skipNewlines();
         
-        // Skip INDENT if present
         if (peek().type() == TokenType.INDENT) {
             advance();
         }
         
-        // Parse loop body
         List<Statement> body = parseForBlock();
         
         if (body.isEmpty()) {
@@ -458,7 +450,6 @@ public class GrizzlyParser {
             );
         }
         
-        // Consume DEDENT after for loop body
         if (peek().type() == TokenType.DEDENT) {
             advance();
         }
@@ -467,75 +458,55 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse the body of a for loop.
-     * 
-     * <p>Parses statements until hitting a DEDENT that ends this block.
-     * Does NOT consume the DEDENT - the caller (parseForLoop) will consume it.
-     * 
-     * <p><b>Important:</b> Nested compound statements (if/for) consume their own
-     * DEDENTs via parseIfStatement/parseForLoop. So when parseForBlock sees a
-     * DEDENT, it's the one that ends this for loop's block.
-     * 
-     * <p><b>Example:</b>
-     * <pre>{@code
-     * for person in people:
-     *     if age >= 18:           # INDENT
-     *         append(name)        # Statement
-     *     # DEDENT (consumed by parseIfStatement)
-     * # DEDENT (seen by parseForBlock, exits loop)
-     * }</pre>
-     * 
-     * @return List of statements in the for loop body
-     */
-    private List<Statement> parseForBlock() {
-        List<Statement> statements = new ArrayList<>();
-        
-        while (!isAtEnd()) {
-            TokenType type = peek().type();
-            
-            // Stop at DEDENT (caller will consume it), EOF, or next function
-            if (type == TokenType.DEDENT || type == TokenType.EOF || type == TokenType.DEF) {
-                break;
-            }
-            
-            // Skip newlines and indents
-            if (type == TokenType.NEWLINE || type == TokenType.INDENT) {
-                advance();
-                continue;
-            }
-            
-            // Parse a statement
-            statements.add(parseStatement());
-            
-            // Skip any newlines after the statement
-            skipNewlines();
-        }
-        
-        return statements;
-    }
-    
-    /**
      * Parse an expression with proper operator precedence.
      * 
      * <p>Precedence (lowest to highest):
      * <ol>
-     *   <li>Comparison: ==, !=, <, >, <=, >=</li>
+     *   <li>or (logical)</li>
+     *   <li>and (logical)</li>
+     *   <li>not (unary logical)</li>
+     *   <li>Comparison: ==, !=, <, >, <=, >=, in, not in</li>
      *   <li>Addition/Subtraction: +, -</li>
      *   <li>Multiplication/Division: *, /, //, %</li>
      *   <li>Power: **</li>
      * </ol>
      * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * 2 + 3 * 4        → 2 + (3 * 4) = 14  (not 20!)
-     * 5 ** 2 + 1       → (5 ** 2) + 1 = 26
-     * 10 - 2 * 3       → 10 - (2 * 3) = 4
-     * "a" + "b" + "c"  → (("a" + "b") + "c") = "abc"
-     * }</pre>
-     * 
      * @return Expression AST node with proper precedence
      */
     private Expression parseExpression() {
+        return parseOr();
+    }
+    
+    private Expression parseOr() {
+        Expression left = parseAnd();
+        
+        while (peek().type() == TokenType.OR) {
+            advance();
+            Expression right = parseAnd();
+            left = new BinaryOp(left, "or", right);
+        }
+        
+        return left;
+    }
+    
+    private Expression parseAnd() {
+        Expression left = parseNot();
+        
+        while (peek().type() == TokenType.AND) {
+            advance();
+            Expression right = parseNot();
+            left = new BinaryOp(left, "and", right);
+        }
+        
+        return left;
+    }
+    
+    private Expression parseNot() {
+        if (peek().type() == TokenType.NOT) {
+            advance();
+            Expression expr = parseNot();
+            return new BinaryOp(new BooleanLiteral(true), "not", expr);
+        }
         return parseComparison();
     }
     
@@ -550,6 +521,15 @@ public class GrizzlyParser {
                 advance();
                 Expression right = parseAddition();
                 left = new BinaryOp(left, tokenTypeToOp(op), right);
+            } else if (op == TokenType.IN) {
+                advance();
+                Expression right = parseAddition();
+                left = new BinaryOp(left, "in", right);
+            } else if (op == TokenType.NOT && peekNext().type() == TokenType.IN) {
+                advance(); // consume 'not'
+                advance(); // consume 'in'
+                Expression right = parseAddition();
+                left = new BinaryOp(left, "not in", right);
             } else {
                 break;
             }
@@ -898,6 +878,13 @@ public class GrizzlyParser {
             return tokens.get(tokens.size() - 1); // Return EOF
         }
         return tokens.get(position);
+    }
+    
+    private Token peekNext() {
+        if (position + 1 >= tokens.size()) {
+            return tokens.get(tokens.size() - 1); // Return EOF
+        }
+        return tokens.get(position + 1);
     }
     
     private Token advance() {

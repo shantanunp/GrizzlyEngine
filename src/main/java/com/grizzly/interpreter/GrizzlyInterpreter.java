@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.grizzly.interpreter.ValueUtils.*;
+
 /**
  * Grizzly Interpreter - Executes the AST (Abstract Syntax Tree).
  * 
@@ -29,7 +31,6 @@ public class GrizzlyInterpreter {
     private final BuiltinRegistry builtins;
     private final ModuleRegistry modules;
     
-    // Execution state for safeguards
     private int currentRecursionDepth = 0;
     private long executionStartTime;
     
@@ -162,31 +163,7 @@ public class GrizzlyInterpreter {
     
     private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
-            if (builtins.contains(call.functionName())) {
-                List<Value> args = new ArrayList<>();
-                for (Expression argExpr : call.args()) {
-                    args.add(evaluateExpression(argExpr, context));
-                }
-                return builtins.get(call.functionName()).apply(args);
-            }
-            
-            FunctionDef func = program.findFunction(call.functionName());
-            if (func == null) {
-                throw new GrizzlyExecutionException(
-                    "Function '" + call.functionName() + "' not found",
-                    call.lineNumber()
-                );
-            }
-            
-            ExecutionContext funcContext = new ExecutionContext();
-            
-            for (int i = 0; i < func.params().size(); i++) {
-                Value argValue = evaluateExpression(call.args().get(i), context);
-                funcContext.set(func.params().get(i), argValue);
-            }
-            
-            return executeFunction(func, funcContext);
-            
+            return invokeFunction(call.functionName(), call.args(), context, call.lineNumber());
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -197,41 +174,44 @@ public class GrizzlyInterpreter {
         }
     }
     
+    private Value invokeFunction(String name, List<Expression> argExprs, 
+                                 ExecutionContext context, int lineNumber) {
+        if (builtins.contains(name)) {
+            List<Value> args = evaluateArguments(argExprs, context);
+            return builtins.get(name).apply(args);
+        }
+        
+        FunctionDef func = program.findFunction(name);
+        if (func == null) {
+            throw new GrizzlyExecutionException(
+                "Function '" + name + "' not found",
+                lineNumber
+            );
+        }
+        
+        ExecutionContext funcContext = new ExecutionContext();
+        for (int i = 0; i < func.params().size(); i++) {
+            Value argValue = evaluateExpression(argExprs.get(i), context);
+            funcContext.set(func.params().get(i), argValue);
+        }
+        
+        return executeFunction(func, funcContext);
+    }
+    
     private Value executeIf(IfStatement ifStmt, ExecutionContext context) {
         try {
-            Value conditionValue = evaluateExpression(ifStmt.condition(), context);
-            
-            if (conditionValue.isTruthy()) {
-                for (Statement stmt : ifStmt.thenBlock()) {
-                    Value result = executeStatement(stmt, context);
-                    if (stmt instanceof ReturnStatement) {
-                        return result;
-                    }
-                }
-                return NullValue.INSTANCE;
+            if (evaluateExpression(ifStmt.condition(), context).isTruthy()) {
+                return executeBlock(ifStmt.thenBlock(), context);
             }
             
             for (IfStatement.ElifBranch elifBranch : ifStmt.elifBranches()) {
-                Value elifConditionValue = evaluateExpression(elifBranch.condition(), context);
-                
-                if (elifConditionValue.isTruthy()) {
-                    for (Statement stmt : elifBranch.statements()) {
-                        Value result = executeStatement(stmt, context);
-                        if (stmt instanceof ReturnStatement) {
-                            return result;
-                        }
-                    }
-                    return NullValue.INSTANCE;
+                if (evaluateExpression(elifBranch.condition(), context).isTruthy()) {
+                    return executeBlock(elifBranch.statements(), context);
                 }
             }
             
             if (ifStmt.elseBlock() != null) {
-                for (Statement stmt : ifStmt.elseBlock()) {
-                    Value result = executeStatement(stmt, context);
-                    if (stmt instanceof ReturnStatement) {
-                        return result;
-                    }
-                }
+                return executeBlock(ifStmt.elseBlock(), context);
             }
             
             return NullValue.INSTANCE;
@@ -245,6 +225,16 @@ public class GrizzlyInterpreter {
                 ifStmt.lineNumber()
             );
         }
+    }
+    
+    private Value executeBlock(List<Statement> statements, ExecutionContext context) {
+        for (Statement stmt : statements) {
+            Value result = executeStatement(stmt, context);
+            if (stmt instanceof ReturnStatement) {
+                return result;
+            }
+        }
+        return NullValue.INSTANCE;
     }
     
     private Value executeForLoop(ForLoop forLoop, ExecutionContext context) {
@@ -394,11 +384,12 @@ public class GrizzlyInterpreter {
             case "//" -> evaluateNumericOp(left, right, "//");
             case "%" -> evaluateNumericOp(left, right, "%");
             case "**" -> evaluateNumericOp(left, right, "**");
-            case "==" -> BoolValue.of(evaluateEquality(left, right, true));
-            case "!=" -> BoolValue.of(evaluateEquality(left, right, false));
+            case "==" -> BoolValue.of(areEqual(left, right));
+            case "!=" -> BoolValue.of(!areEqual(left, right));
             case "<", ">", "<=", ">=" -> BoolValue.of(evaluateComparison(left, right, operator));
             case "and" -> left.isTruthy() ? right : left;
             case "or" -> left.isTruthy() ? left : right;
+            case "not" -> BoolValue.of(!right.isTruthy());
             case "in" -> BoolValue.of(evaluateIn(left, right));
             case "not in" -> BoolValue.of(!evaluateIn(left, right));
             default -> throw new GrizzlyExecutionException("Unknown operator: " + operator);
@@ -409,7 +400,7 @@ public class GrizzlyInterpreter {
         return switch (right) {
             case ListValue list -> {
                 for (Value item : list.items()) {
-                    if (evaluateEquality(left, item, true)) {
+                    if (areEqual(left, item)) {
                         yield true;
                     }
                 }
@@ -427,38 +418,6 @@ public class GrizzlyInterpreter {
                 "Cannot use 'in' operator with " + right.typeName()
             );
         };
-    }
-    
-    private boolean evaluateEquality(Value left, Value right, boolean checkEqual) {
-        if (left instanceof NumberValue ln && right instanceof NumberValue rn) {
-            boolean equal = Math.abs(ln.asDouble() - rn.asDouble()) < 1e-10;
-            return checkEqual ? equal : !equal;
-        }
-        
-        if (left instanceof StringValue ls && right instanceof NumberValue) {
-            try {
-                double leftNum = Double.parseDouble(ls.value());
-                double rightNum = ((NumberValue) right).asDouble();
-                boolean equal = Math.abs(leftNum - rightNum) < 1e-10;
-                return checkEqual ? equal : !equal;
-            } catch (NumberFormatException e) {
-                // Fall through
-            }
-        }
-        
-        if (left instanceof NumberValue && right instanceof StringValue rs) {
-            try {
-                double leftNum = ((NumberValue) left).asDouble();
-                double rightNum = Double.parseDouble(rs.value());
-                boolean equal = Math.abs(leftNum - rightNum) < 1e-10;
-                return checkEqual ? equal : !equal;
-            } catch (NumberFormatException e) {
-                // Fall through
-            }
-        }
-        
-        boolean equal = left.equals(right);
-        return checkEqual ? equal : !equal;
     }
     
     private Value evaluatePlus(Value left, Value right) {
@@ -567,256 +526,26 @@ public class GrizzlyInterpreter {
     
     private Value evaluateListMethod(ListValue list, String methodName, 
                                      List<Expression> arguments, ExecutionContext context) {
-        return switch (methodName) {
-            case "append" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException(
-                        "append() takes exactly 1 argument, got " + arguments.size()
-                    );
-                }
-                Value value = evaluateExpression(arguments.get(0), context);
-                list.append(value);
-                yield NullValue.INSTANCE;
-            }
-            
-            case "extend" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException(
-                        "extend() takes exactly 1 argument, got " + arguments.size()
-                    );
-                }
-                Value value = evaluateExpression(arguments.get(0), context);
-                if (!(value instanceof ListValue other)) {
-                    throw new GrizzlyExecutionException("extend() argument must be a list");
-                }
-                list.extend(other);
-                yield NullValue.INSTANCE;
-            }
-            
-            case "pop" -> {
-                if (list.isEmpty()) {
-                    throw new GrizzlyExecutionException("pop from empty list");
-                }
-                if (arguments.isEmpty()) {
-                    yield list.items().remove(list.size() - 1);
-                } else {
-                    int index = toInt(evaluateExpression(arguments.get(0), context));
-                    if (index < 0) index = list.size() + index;
-                    if (index < 0 || index >= list.size()) {
-                        throw new GrizzlyExecutionException("pop index out of range");
-                    }
-                    yield list.items().remove(index);
-                }
-            }
-            
-            case "insert" -> {
-                if (arguments.size() != 2) {
-                    throw new GrizzlyExecutionException(
-                        "insert() takes exactly 2 arguments, got " + arguments.size()
-                    );
-                }
-                int index = toInt(evaluateExpression(arguments.get(0), context));
-                Value value = evaluateExpression(arguments.get(1), context);
-                if (index < 0) index = Math.max(0, list.size() + index);
-                if (index > list.size()) index = list.size();
-                list.items().add(index, value);
-                yield NullValue.INSTANCE;
-            }
-            
-            case "reverse" -> {
-                java.util.Collections.reverse(list.items());
-                yield NullValue.INSTANCE;
-            }
-            
-            case "sort" -> {
-                list.items().sort((a, b) -> {
-                    if (a instanceof NumberValue na && b instanceof NumberValue nb) {
-                        return Double.compare(na.asDouble(), nb.asDouble());
-                    }
-                    return asString(a).compareTo(asString(b));
-                });
-                yield NullValue.INSTANCE;
-            }
-            
-            case "index" -> {
-                if (arguments.isEmpty()) {
-                    throw new GrizzlyExecutionException("index() requires at least 1 argument");
-                }
-                Value needle = evaluateExpression(arguments.get(0), context);
-                for (int i = 0; i < list.size(); i++) {
-                    if (evaluateEquality(list.get(i), needle, true)) {
-                        yield NumberValue.of(i);
-                    }
-                }
-                throw new GrizzlyExecutionException("Value not found in list");
-            }
-            
-            case "count" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("count() takes exactly 1 argument");
-                }
-                Value needle = evaluateExpression(arguments.get(0), context);
-                int count = 0;
-                for (Value item : list.items()) {
-                    if (evaluateEquality(item, needle, true)) {
-                        count++;
-                    }
-                }
-                yield NumberValue.of(count);
-            }
-            
-            default -> throw new GrizzlyExecutionException("Unknown list method: " + methodName);
-        };
+        List<Value> args = evaluateArguments(arguments, context);
+        return ListMethods.evaluate(list, methodName, args);
     }
     
     private Value evaluateStringMethod(StringValue str, String methodName,
                                        List<Expression> arguments, ExecutionContext context) {
-        return switch (methodName) {
-            case "upper" -> new StringValue(str.value().toUpperCase());
-            case "lower" -> new StringValue(str.value().toLowerCase());
-            case "strip" -> new StringValue(str.value().strip());
-            case "lstrip" -> new StringValue(str.value().stripLeading());
-            case "rstrip" -> new StringValue(str.value().stripTrailing());
-            
-            case "split" -> {
-                String sep = arguments.isEmpty() 
-                    ? null 
-                    : asString(evaluateExpression(arguments.get(0), context));
-                
-                String[] parts = sep == null 
-                    ? str.value().split("\\s+")
-                    : str.value().split(java.util.regex.Pattern.quote(sep), -1);
-                
-                List<Value> result = new ArrayList<>();
-                for (String part : parts) {
-                    if (sep != null || !part.isEmpty()) {
-                        result.add(new StringValue(part));
-                    }
-                }
-                yield new ListValue(result);
-            }
-            
-            case "join" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("join() takes exactly 1 argument");
-                }
-                Value arg = evaluateExpression(arguments.get(0), context);
-                if (!(arg instanceof ListValue list)) {
-                    throw new GrizzlyExecutionException("join() argument must be a list");
-                }
-                StringBuilder sb = new StringBuilder();
-                boolean first = true;
-                for (Value item : list.items()) {
-                    if (!first) sb.append(str.value());
-                    sb.append(asString(item));
-                    first = false;
-                }
-                yield new StringValue(sb.toString());
-            }
-            
-            case "replace" -> {
-                if (arguments.size() != 2) {
-                    throw new GrizzlyExecutionException("replace() takes exactly 2 arguments");
-                }
-                String old = asString(evaluateExpression(arguments.get(0), context));
-                String replacement = asString(evaluateExpression(arguments.get(1), context));
-                yield new StringValue(str.value().replace(old, replacement));
-            }
-            
-            case "startswith" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("startswith() takes exactly 1 argument");
-                }
-                String prefix = asString(evaluateExpression(arguments.get(0), context));
-                yield BoolValue.of(str.value().startsWith(prefix));
-            }
-            
-            case "endswith" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("endswith() takes exactly 1 argument");
-                }
-                String suffix = asString(evaluateExpression(arguments.get(0), context));
-                yield BoolValue.of(str.value().endsWith(suffix));
-            }
-            
-            case "contains" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("contains() takes exactly 1 argument");
-                }
-                String substr = asString(evaluateExpression(arguments.get(0), context));
-                yield BoolValue.of(str.value().contains(substr));
-            }
-            
-            case "find" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("find() takes exactly 1 argument");
-                }
-                String substr = asString(evaluateExpression(arguments.get(0), context));
-                yield NumberValue.of(str.value().indexOf(substr));
-            }
-            
-            case "count" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("count() takes exactly 1 argument");
-                }
-                String substr = asString(evaluateExpression(arguments.get(0), context));
-                int count = 0;
-                int idx = 0;
-                while ((idx = str.value().indexOf(substr, idx)) != -1) {
-                    count++;
-                    idx += substr.length();
-                }
-                yield NumberValue.of(count);
-            }
-            
-            case "isdigit" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isDigit));
-            case "isalpha" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isLetter));
-            case "isalnum" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isLetterOrDigit));
-            case "isspace" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isWhitespace));
-            
-            case "zfill" -> {
-                if (arguments.size() != 1) {
-                    throw new GrizzlyExecutionException("zfill() takes exactly 1 argument");
-                }
-                int width = toInt(evaluateExpression(arguments.get(0), context));
-                String s = str.value();
-                if (s.length() >= width) {
-                    yield str;
-                }
-                boolean negative = s.startsWith("-");
-                String digits = negative ? s.substring(1) : s;
-                String padded = "0".repeat(width - s.length()) + digits;
-                yield new StringValue(negative ? "-" + padded : padded);
-            }
-            
-            default -> throw new GrizzlyExecutionException("Unknown string method: " + methodName);
-        };
+        List<Value> args = evaluateArguments(arguments, context);
+        return StringMethods.evaluate(str, methodName, args);
+    }
+    
+    private List<Value> evaluateArguments(List<Expression> arguments, ExecutionContext context) {
+        List<Value> args = new ArrayList<>();
+        for (Expression arg : arguments) {
+            args.add(evaluateExpression(arg, context));
+        }
+        return args;
     }
     
     private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
-        if (builtins.contains(funcCall.functionName())) {
-            List<Value> args = new ArrayList<>();
-            for (Expression argExpr : funcCall.args()) {
-                args.add(evaluateExpression(argExpr, context));
-            }
-            return builtins.get(funcCall.functionName()).apply(args);
-        }
-        
-        FunctionDef func = program.findFunction(funcCall.functionName());
-        if (func == null) {
-            throw new GrizzlyExecutionException(
-                "Function '" + funcCall.functionName() + "' not found"
-            );
-        }
-        
-        ExecutionContext funcContext = new ExecutionContext();
-        
-        for (int i = 0; i < func.params().size(); i++) {
-            Value argValue = evaluateExpression(funcCall.args().get(i), context);
-            funcContext.set(func.params().get(i), argValue);
-        }
-        
-        return executeFunction(func, funcContext);
+        return invokeFunction(funcCall.functionName(), funcCall.args(), context, 0);
     }
     
     private void setTarget(Expression target, Value value, ExecutionContext context) {
@@ -945,34 +674,4 @@ public class GrizzlyInterpreter {
         };
     }
     
-    // ==================== Helper Methods ====================
-    
-    private String asString(Value value) {
-        return switch (value) {
-            case StringValue s -> s.value();
-            case NumberValue n -> n.toString();
-            case BoolValue b -> b.toString();
-            case NullValue ignored -> "None";
-            default -> value.toString();
-        };
-    }
-    
-    private double toDouble(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asDouble();
-            case StringValue s -> {
-                try {
-                    yield Double.parseDouble(s.value());
-                } catch (NumberFormatException e) {
-                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to number");
-                }
-            }
-            case DecimalValue d -> d.toDouble();
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to number");
-        };
-    }
-    
-    private int toInt(Value value) {
-        return (int) toDouble(value);
-    }
 }
