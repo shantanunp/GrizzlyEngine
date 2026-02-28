@@ -29,7 +29,7 @@ public class Main {
     
     private static final String INPUT_FILE = "examples/input.json";
     private static final String TEMPLATE_FILE = "examples/transform.py";
-    private static final String OUTPUT_FILE = "output.json";
+    private static final String OUTPUT_FILE = "examples/output.json";
     
     public static void main(String[] args) {
         try {
