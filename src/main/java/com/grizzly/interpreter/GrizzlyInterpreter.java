@@ -241,21 +241,10 @@ public class GrizzlyInterpreter {
         try {
             Value iterableVal = evaluateExpression(forLoop.iterable(), context);
             
-            if (!(iterableVal instanceof ListValue list)) {
-                if (iterableVal instanceof NullValue) {
-                    throw new GrizzlyExecutionException(
-                        "Cannot iterate over null",
-                        forLoop.lineNumber()
-                    );
-                }
-                throw new GrizzlyExecutionException(
-                    "Can only iterate over lists, got: " + iterableVal.typeName(),
-                    forLoop.lineNumber()
-                );
-            }
+            List<Value> items = toIterableList(iterableVal, forLoop.lineNumber());
             
             int iterations = 0;
-            itemLoop: for (Value item : list) {
+            itemLoop: for (Value item : items) {
                 // Check loop iteration limit
                 iterations++;
                 if (iterations > config.maxLoopIterations()) {
@@ -310,8 +299,9 @@ public class GrizzlyInterpreter {
                 case NumberLiteral n -> new NumberValue(n.value());
                 case StringLiteral s -> new StringValue(s.value());
                 case BooleanLiteral b -> BoolValue.of(b.value());
+                case NullLiteral ignored -> NullValue.INSTANCE;
                 case Identifier i -> context.get(i.name());
-                case DictLiteral d -> DictValue.empty();
+                case DictLiteral d -> evaluateDictLiteral(d, context);
                 case ListLiteral l -> evaluateListLiteral(l, context);
                 case DictAccess d -> evaluateDictAccess(d, context);
                 case AttrAccess a -> evaluateAttrAccess(a, context);
@@ -481,6 +471,18 @@ public class GrizzlyInterpreter {
         return new ListValue(result);
     }
     
+    private DictValue evaluateDictLiteral(DictLiteral dictLiteral, ExecutionContext context) {
+        DictValue result = DictValue.empty();
+        
+        for (DictLiteral.Entry entry : dictLiteral.entries()) {
+            String key = asString(evaluateExpression(entry.key(), context));
+            Value value = evaluateExpression(entry.value(), context);
+            result.put(key, value);
+        }
+        
+        return result;
+    }
+    
     private Value evaluateMethodCall(MethodCall methodCall, ExecutionContext context) {
         if (methodCall.object() instanceof Identifier id) {
             String moduleName = id.name();
@@ -519,6 +521,10 @@ public class GrizzlyInterpreter {
             return evaluateStringMethod(str, methodName, methodCall.arguments(), context);
         }
         
+        if (obj instanceof DictValue dict) {
+            return evaluateDictMethod(dict, methodName, methodCall.arguments(), context);
+        }
+        
         throw new GrizzlyExecutionException(
             "Object of type " + obj.typeName() + " does not have method '" + methodName + "'"
         );
@@ -534,6 +540,12 @@ public class GrizzlyInterpreter {
                                        List<Expression> arguments, ExecutionContext context) {
         List<Value> args = evaluateArguments(arguments, context);
         return StringMethods.evaluate(str, methodName, args);
+    }
+    
+    private Value evaluateDictMethod(DictValue dict, String methodName,
+                                     List<Expression> arguments, ExecutionContext context) {
+        List<Value> args = evaluateArguments(arguments, context);
+        return DictMethods.evaluate(dict, methodName, args);
     }
     
     private List<Value> evaluateArguments(List<Expression> arguments, ExecutionContext context) {
@@ -674,4 +686,33 @@ public class GrizzlyInterpreter {
         };
     }
     
+    /**
+     * Convert a Value to an iterable list of Values.
+     * Supports lists, strings (char iteration), and dicts (key iteration).
+     */
+    private List<Value> toIterableList(Value value, int lineNumber) {
+        return switch (value) {
+            case ListValue list -> list.items();
+            case StringValue str -> {
+                List<Value> chars = new ArrayList<>();
+                for (char c : str.value().toCharArray()) {
+                    chars.add(new StringValue(String.valueOf(c)));
+                }
+                yield chars;
+            }
+            case DictValue dict -> {
+                List<Value> keys = new ArrayList<>();
+                for (String key : dict.entries().keySet()) {
+                    keys.add(new StringValue(key));
+                }
+                yield keys;
+            }
+            case NullValue ignored -> throw new GrizzlyExecutionException(
+                "Cannot iterate over None", lineNumber
+            );
+            default -> throw new GrizzlyExecutionException(
+                "Cannot iterate over " + value.typeName(), lineNumber
+            );
+        };
+    }
 }

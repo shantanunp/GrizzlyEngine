@@ -14,8 +14,9 @@ public enum TokenType {
     IN,         // in
     BREAK,      // break
     CONTINUE,   // continue
-    TRUE,       // true
-    FALSE,      // false
+    TRUE,       // True (Python style)
+    FALSE,      // False (Python style)
+    NONE,       // None
     IMPORT,     // import
     FROM,       // from (for future use)
     AND,        // and

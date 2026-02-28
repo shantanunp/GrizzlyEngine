@@ -29,7 +29,10 @@ public class GrizzlyLexer {
         Map.entry("in", TokenType.IN),
         Map.entry("break", TokenType.BREAK),
         Map.entry("continue", TokenType.CONTINUE),
-        Map.entry("true", TokenType.TRUE),
+        Map.entry("True", TokenType.TRUE),
+        Map.entry("False", TokenType.FALSE),
+        Map.entry("None", TokenType.NONE),
+        Map.entry("true", TokenType.TRUE),   // Also support lowercase for backwards compat
         Map.entry("false", TokenType.FALSE),
         Map.entry("import", TokenType.IMPORT),
         Map.entry("from", TokenType.FROM),

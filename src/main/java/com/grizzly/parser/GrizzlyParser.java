@@ -712,7 +712,7 @@ public class GrizzlyParser {
             return new BinaryOp(new NumberLiteral(0), "-", expr);
         }
         
-        // Boolean literals: true, false
+        // Boolean literals: True, False
         if (token.type() == TokenType.TRUE) {
             advance();
             return new BooleanLiteral(true);
@@ -721,6 +721,12 @@ public class GrizzlyParser {
         if (token.type() == TokenType.FALSE) {
             advance();
             return new BooleanLiteral(false);
+        }
+        
+        // None literal
+        if (token.type() == TokenType.NONE) {
+            advance();
+            return new NullLiteral();
         }
         
         // String literal
@@ -749,11 +755,9 @@ public class GrizzlyParser {
             }
         }
         
-        // Dict literal: {}
+        // Dict literal: {} or {"key": value, ...}
         if (token.type() == TokenType.LBRACE) {
-            advance();
-            expect(TokenType.RBRACE, "Expected '}'");
-            return new DictLiteral();
+            return parseDictLiteral();
         }
         
         // List literal: [] or [1, 2, 3]
@@ -869,6 +873,32 @@ public class GrizzlyParser {
         expect(TokenType.RBRACKET, "Expected ']'");
         
         return new ListLiteral(elements);
+    }
+    
+    /**
+     * Parse a dict literal: {} or {"key": value, ...}
+     */
+    private DictLiteral parseDictLiteral() {
+        expect(TokenType.LBRACE, "Expected '{'");
+        
+        List<DictLiteral.Entry> entries = new ArrayList<>();
+        
+        if (peek().type() != TokenType.RBRACE) {
+            do {
+                Expression key = parseExpression();
+                expect(TokenType.COLON, "Expected ':' after dict key");
+                Expression value = parseExpression();
+                entries.add(new DictLiteral.Entry(key, value));
+                
+                if (peek().type() == TokenType.COMMA) {
+                    advance();
+                }
+            } while (peek().type() != TokenType.RBRACE);
+        }
+        
+        expect(TokenType.RBRACE, "Expected '}'");
+        
+        return new DictLiteral(entries);
     }
     
     // === Helper methods ===

@@ -26,6 +26,7 @@ public final class BuiltinRegistry {
     
     public BuiltinRegistry() {
         registerCoreFunctions();
+        registerIterationFunctions();
         registerDateTimeFunctions();
         registerMathFunctions();
     }
@@ -267,6 +268,228 @@ public final class BuiltinRegistry {
             }
         }
         return max;
+    }
+    
+    // ==================== Iteration Functions ====================
+    
+    private void registerIterationFunctions() {
+        // enumerate() - returns list of [index, value] pairs
+        functions.put("enumerate", args -> {
+            requireArgCountRange("enumerate", args, 1, 2);
+            ListValue list = requireType("enumerate", args.get(0), ListValue.class, "first argument");
+            int start = args.size() > 1 ? toInt(args.get(1)) : 0;
+            
+            java.util.List<Value> result = new java.util.ArrayList<>();
+            int index = start;
+            for (Value item : list.items()) {
+                java.util.List<Value> pair = new java.util.ArrayList<>();
+                pair.add(NumberValue.of(index));
+                pair.add(item);
+                result.add(new ListValue(pair));
+                index++;
+            }
+            return new ListValue(result);
+        });
+        
+        // zip() - combine multiple lists into list of tuples
+        functions.put("zip", args -> {
+            if (args.isEmpty()) {
+                return ListValue.empty();
+            }
+            
+            java.util.List<ListValue> lists = new java.util.ArrayList<>();
+            int minLen = Integer.MAX_VALUE;
+            
+            for (Value arg : args) {
+                ListValue list = requireType("zip", arg, ListValue.class, "argument");
+                lists.add(list);
+                minLen = Math.min(minLen, list.size());
+            }
+            
+            java.util.List<Value> result = new java.util.ArrayList<>();
+            for (int i = 0; i < minLen; i++) {
+                java.util.List<Value> tuple = new java.util.ArrayList<>();
+                for (ListValue list : lists) {
+                    tuple.add(list.get(i));
+                }
+                result.add(new ListValue(tuple));
+            }
+            return new ListValue(result);
+        });
+        
+        // sorted() - return a new sorted list
+        functions.put("sorted", args -> {
+            requireArgCountRange("sorted", args, 1, 2);
+            ListValue list = requireType("sorted", args.get(0), ListValue.class, "first argument");
+            boolean reverse = args.size() > 1 && args.get(1).isTruthy();
+            
+            java.util.List<Value> sorted = new java.util.ArrayList<>(list.items());
+            sorted.sort((a, b) -> {
+                int cmp;
+                if (a instanceof NumberValue na && b instanceof NumberValue nb) {
+                    cmp = Double.compare(na.asDouble(), nb.asDouble());
+                } else {
+                    cmp = asString(a).compareTo(asString(b));
+                }
+                return reverse ? -cmp : cmp;
+            });
+            return new ListValue(sorted);
+        });
+        
+        // reversed() - return a new reversed list
+        functions.put("reversed", args -> {
+            requireArgCount("reversed", args, 1);
+            ListValue list = requireType("reversed", args.get(0), ListValue.class, "argument");
+            
+            java.util.List<Value> reversed = new java.util.ArrayList<>(list.items());
+            java.util.Collections.reverse(reversed);
+            return new ListValue(reversed);
+        });
+        
+        // any() - True if any element is truthy
+        functions.put("any", args -> {
+            requireArgCount("any", args, 1);
+            ListValue list = requireType("any", args.get(0), ListValue.class, "argument");
+            
+            for (Value item : list.items()) {
+                if (item.isTruthy()) {
+                    return BoolValue.TRUE;
+                }
+            }
+            return BoolValue.FALSE;
+        });
+        
+        // all() - True if all elements are truthy
+        functions.put("all", args -> {
+            requireArgCount("all", args, 1);
+            ListValue list = requireType("all", args.get(0), ListValue.class, "argument");
+            
+            for (Value item : list.items()) {
+                if (!item.isTruthy()) {
+                    return BoolValue.FALSE;
+                }
+            }
+            return BoolValue.TRUE;
+        });
+        
+        // list() - convert to list
+        functions.put("list", args -> {
+            if (args.isEmpty()) {
+                return ListValue.empty();
+            }
+            requireArgCount("list", args, 1);
+            Value value = args.get(0);
+            
+            return switch (value) {
+                case ListValue l -> new ListValue(new java.util.ArrayList<>(l.items()));
+                case StringValue s -> {
+                    java.util.List<Value> chars = new java.util.ArrayList<>();
+                    for (char c : s.value().toCharArray()) {
+                        chars.add(new StringValue(String.valueOf(c)));
+                    }
+                    yield new ListValue(chars);
+                }
+                case DictValue d -> {
+                    java.util.List<Value> keys = new java.util.ArrayList<>();
+                    for (String key : d.entries().keySet()) {
+                        keys.add(new StringValue(key));
+                    }
+                    yield new ListValue(keys);
+                }
+                default -> throw new GrizzlyExecutionException(
+                    "list() argument must be iterable, got: " + value.typeName()
+                );
+            };
+        });
+        
+        // dict() - convert to dict or create empty
+        functions.put("dict", args -> {
+            if (args.isEmpty()) {
+                return DictValue.empty();
+            }
+            requireArgCount("dict", args, 1);
+            Value value = args.get(0);
+            
+            if (value instanceof DictValue d) {
+                DictValue result = DictValue.empty();
+                for (java.util.Map.Entry<String, Value> e : d.entries().entrySet()) {
+                    result.put(e.getKey(), e.getValue());
+                }
+                return result;
+            }
+            if (value instanceof ListValue list) {
+                DictValue result = DictValue.empty();
+                for (Value item : list.items()) {
+                    if (!(item instanceof ListValue pair) || pair.size() != 2) {
+                        throw new GrizzlyExecutionException(
+                            "dict() argument must be list of [key, value] pairs"
+                        );
+                    }
+                    String key = asString(pair.get(0));
+                    result.put(key, pair.get(1));
+                }
+                return result;
+            }
+            throw new GrizzlyExecutionException(
+                "dict() argument must be a dict or list of pairs, got: " + value.typeName()
+            );
+        });
+        
+        // type() - get type name as string
+        functions.put("type", args -> {
+            requireArgCount("type", args, 1);
+            return new StringValue(args.get(0).typeName());
+        });
+        
+        // isinstance() - check if value is of given type
+        functions.put("isinstance", args -> {
+            requireArgCount("isinstance", args, 2);
+            Value value = args.get(0);
+            String typeName = asString(args.get(1));
+            
+            return BoolValue.of(switch (typeName.toLowerCase()) {
+                case "str", "string" -> value instanceof StringValue;
+                case "int", "integer" -> value instanceof NumberValue n && n.isInteger();
+                case "float", "number" -> value instanceof NumberValue;
+                case "bool", "boolean" -> value instanceof BoolValue;
+                case "list" -> value instanceof ListValue;
+                case "dict" -> value instanceof DictValue;
+                case "none", "null" -> value instanceof NullValue;
+                case "datetime" -> value instanceof DateTimeValue;
+                case "decimal" -> value instanceof DecimalValue;
+                default -> false;
+            });
+        });
+        
+        // hasattr() - check if dict has key
+        functions.put("hasattr", args -> {
+            requireArgCount("hasattr", args, 2);
+            if (!(args.get(0) instanceof DictValue dict)) {
+                return BoolValue.FALSE;
+            }
+            String key = asString(args.get(1));
+            return BoolValue.of(dict.containsKey(key));
+        });
+        
+        // getattr() - get dict key with optional default
+        functions.put("getattr", args -> {
+            requireArgCountRange("getattr", args, 2, 3);
+            if (!(args.get(0) instanceof DictValue dict)) {
+                if (args.size() > 2) {
+                    return args.get(2);
+                }
+                throw new GrizzlyExecutionException("getattr() first argument must be a dict");
+            }
+            String key = asString(args.get(1));
+            
+            if (dict.containsKey(key)) {
+                return dict.get(key);
+            }
+            if (args.size() > 2) {
+                return args.get(2);
+            }
+            throw new GrizzlyExecutionException("AttributeError: '" + key + "'");
+        });
     }
     
     // ==================== DateTime Functions ====================
