@@ -1,27 +1,30 @@
 package com.grizzly.interpreter;
 
+import com.grizzly.types.*;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Execution context - holds variables during template execution
+ * Execution context - holds variables during template execution.
  * 
- * Think of this like memory during program execution:
- * - INPUT: the input data
- * - OUTPUT: the output data being built
- * - Any other variables created during execution
+ * <p>Think of this like memory during program execution:
+ * <ul>
+ *   <li>INPUT: the input data (DictValue)</li>
+ *   <li>OUTPUT: the output data being built (DictValue)</li>
+ *   <li>Any other variables created during execution</li>
+ * </ul>
  * 
- * Example:
- * {@code
+ * <p>Example:
+ * <pre>{@code
  * context.set("INPUT", inputData);
- * context.set("OUTPUT", new HashMap<>());
- * Object value = context.get("INPUT");
- * }
+ * context.set("OUTPUT", DictValue.empty());
+ * Value value = context.get("INPUT");
+ * }</pre>
  */
 public class ExecutionContext {
     
-    private final Map<String, Object> variables = new HashMap<>();
-    private final ExecutionContext parent; // For nested scopes (future use)
+    private final Map<String, Value> variables = new HashMap<>();
+    private final ExecutionContext parent;
     
     public ExecutionContext() {
         this.parent = null;
@@ -32,43 +35,62 @@ public class ExecutionContext {
     }
     
     /**
-     * Set a variable
+     * Set a variable.
+     * 
+     * @param name Variable name
+     * @param value The value to store
      */
-    public void set(String name, Object value) {
+    public void set(String name, Value value) {
         variables.put(name, value);
     }
     
     /**
-     * Get a variable (searches parent scopes if not found)
+     * Get a variable (searches parent scopes if not found).
+     * 
+     * @param name Variable name
+     * @return The value, or NullValue if not found
      */
-    public Object get(String name) {
+    public Value get(String name) {
         if (variables.containsKey(name)) {
             return variables.get(name);
         }
         if (parent != null) {
             return parent.get(name);
         }
+        return NullValue.INSTANCE;
+    }
+    
+    /**
+     * Get a variable, returning null if not found (for internal checks).
+     */
+    public Value getOrNull(String name) {
+        if (variables.containsKey(name)) {
+            return variables.get(name);
+        }
+        if (parent != null) {
+            return parent.getOrNull(name);
+        }
         return null;
     }
     
     /**
-     * Check if variable exists
+     * Check if variable exists.
      */
     public boolean has(String name) {
         return variables.containsKey(name) || (parent != null && parent.has(name));
     }
     
     /**
-     * Create a child context (for nested scopes)
+     * Create a child context (for nested scopes).
      */
     public ExecutionContext createChild() {
         return new ExecutionContext(this);
     }
     
     /**
-     * Get all variables (for debugging)
+     * Get all variables (for debugging).
      */
-    public Map<String, Object> getVariables() {
+    public Map<String, Value> getVariables() {
         return new HashMap<>(variables);
     }
 }

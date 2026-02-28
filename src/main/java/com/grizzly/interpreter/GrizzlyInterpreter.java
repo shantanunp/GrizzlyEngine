@@ -2,6 +2,7 @@ package com.grizzly.interpreter;
 
 import com.grizzly.exception.GrizzlyExecutionException;
 import com.grizzly.parser.ast.*;
+import com.grizzly.types.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,13 +11,17 @@ import java.util.Map;
 
 /**
  * Grizzly Interpreter - Executes the AST (Abstract Syntax Tree)
- * WITH COMPLETE LIST AND FOR LOOP SUPPORT
+ * 
+ * <p>Uses type-safe Value hierarchy instead of raw Object types.
  */
 public class GrizzlyInterpreter {
     
+    /**
+     * Functional interface for built-in functions.
+     */
     @FunctionalInterface
-    private interface BuiltinFunction {
-        Object apply(List<Object> args);
+    public interface BuiltinFunction {
+        Value apply(List<Value> args);
     }
     
     private final Program program;
@@ -29,9 +34,13 @@ public class GrizzlyInterpreter {
         registerModules();
     }
     
-    @SuppressWarnings("unchecked")
+    /**
+     * Execute the transform function with input data.
+     * 
+     * @param inputData Input data as Java Map (from JSON)
+     * @return Output data as Java Map (for JSON serialization)
+     */
     public Map<String, Object> execute(Map<String, Object> inputData) {
-        // Execute top-level import statements
         ExecutionContext globalContext = new ExecutionContext();
         for (ImportStatement importStmt : program.imports()) {
             executeStatement(importStmt, globalContext);
@@ -43,71 +52,21 @@ public class GrizzlyInterpreter {
         }
         
         ExecutionContext context = new ExecutionContext();
-        context.set("INPUT", inputData);
+        DictValue input = ValueConverter.fromJavaMap(inputData);
+        context.set("INPUT", input);
         
-        Object result = executeFunction(transformFunc, context);
+        Value result = executeFunction(transformFunc, context);
         
-        if (result instanceof Map) {
-            return (Map<String, Object>) result;
+        if (result instanceof DictValue dict) {
+            return ValueConverter.toJavaMap(dict);
         }
         
-        throw new GrizzlyExecutionException("transform() must return a Map, got: " + 
-            (result != null ? result.getClass().getSimpleName() : "null"));
+        throw new GrizzlyExecutionException("transform() must return a dict, got: " + 
+            result.typeName());
     }
     
     /**
-     * Sets up all the built-in functions you can use in templates.
-     * 
-     * <p><b>Functions you can use:</b>
-     * <ul>
-     *   <li><b>len(thing)</b> - Count items
-     *     <ul>
-     *       <li>{@code len([1,2,3])} → 3 (list size)</li>
-     *       <li>{@code len("hello")} → 5 (string length)</li>
-     *     </ul>
-     *   </li>
-     *   
-     *   <li><b>range()</b> - Make number lists
-     *     <ul>
-     *       <li>{@code range(5)} → [0, 1, 2, 3, 4]</li>
-     *       <li>{@code range(2, 7)} → [2, 3, 4, 5, 6]</li>
-     *       <li>{@code range(0, 10, 2)} → [0, 2, 4, 6, 8] (every 2nd)</li>
-     *     </ul>
-     *   </li>
-     *   
-     *   <li><b>now()</b> - Get current time
-     *     <ul>
-     *       <li>{@code now()} → right now</li>
-     *       <li>{@code now("UTC")} → right now in UTC</li>
-     *       <li>{@code now("America/New_York")} → right now in New York</li>
-     *     </ul>
-     *   </li>
-     *   
-     *   <li><b>parseDate(text, pattern)</b> - Convert text to date
-     *     <ul>
-     *       <li>{@code parseDate("2024-02-22", "yyyy-MM-dd")}</li>
-     *       <li>{@code parseDate("22/02/2024", "dd/MM/yyyy")}</li>
-     *       <li>{@code parseDate("20240222", "yyyyMMdd")}</li>
-     *     </ul>
-     *   </li>
-     *   
-     *   <li><b>formatDate(date, pattern)</b> - Convert date to text
-     *     <ul>
-     *       <li>{@code formatDate(now(), "yyyyMMdd")} → "20240222"</li>
-     *       <li>{@code formatDate(now(), "dd/MM/yyyy")} → "22/02/2024"</li>
-     *     </ul>
-     *   </li>
-     *   
-     *   <li><b>Add time:</b>
-     *     <ul>
-     *       <li>{@code addDays(date, 5)} - add 5 days</li>
-     *       <li>{@code addMonths(date, 2)} - add 2 months</li>
-     *       <li>{@code addYears(date, 1)} - add 1 year</li>
-     *       <li>{@code addHours(time, 3)} - add 3 hours</li>
-     *       <li>{@code addMinutes(time, 30)} - add 30 minutes</li>
-     *     </ul>
-     *   </li>
-     * </ul>
+     * Sets up all the built-in functions.
      */
     private void registerBuiltins() {
         // len() function
@@ -118,23 +77,19 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            Object obj = args.get(0);
+            Value val = args.get(0);
             
-            if (obj instanceof List) {
-                return ((List<?>) obj).size();
-            } else if (obj instanceof Map) {
-                return ((Map<?, ?>) obj).size();
-            } else if (obj instanceof String) {
-                return ((String) obj).length();
-            } else {
-                throw new GrizzlyExecutionException(
-                    "len() argument must be a list, dict, or string, got: " + 
-                    (obj != null ? obj.getClass().getSimpleName() : "null")
+            return switch (val) {
+                case ListValue l -> NumberValue.of(l.size());
+                case DictValue d -> NumberValue.of(d.size());
+                case StringValue s -> NumberValue.of(s.value().length());
+                default -> throw new GrizzlyExecutionException(
+                    "len() argument must be a list, dict, or string, got: " + val.typeName()
                 );
-            }
+            };
         });
         
-        // range() function - generates sequences of numbers
+        // range() function
         builtinFunctions.put("range", (args) -> {
             if (args.size() < 1 || args.size() > 3) {
                 throw new GrizzlyExecutionException(
@@ -145,44 +100,39 @@ public class GrizzlyInterpreter {
             int start, stop, step;
             
             if (args.size() == 1) {
-                // range(stop)
                 start = 0;
-                stop = (int) toNumber(args.get(0));
+                stop = toInt(args.get(0));
                 step = 1;
             } else if (args.size() == 2) {
-                // range(start, stop)
-                start = (int) toNumber(args.get(0));
-                stop = (int) toNumber(args.get(1));
+                start = toInt(args.get(0));
+                stop = toInt(args.get(1));
                 step = 1;
             } else {
-                // range(start, stop, step)
-                start = (int) toNumber(args.get(0));
-                stop = (int) toNumber(args.get(1));
-                step = (int) toNumber(args.get(2));
+                start = toInt(args.get(0));
+                stop = toInt(args.get(1));
+                step = toInt(args.get(2));
                 
                 if (step == 0) {
                     throw new GrizzlyExecutionException("range() step cannot be zero");
                 }
             }
             
-            List<Object> result = new ArrayList<>();
+            List<Value> result = new ArrayList<>();
             
             if (step > 0) {
-                // Positive step: increment
                 for (int i = start; i < stop; i += step) {
-                    result.add(i);
+                    result.add(NumberValue.of(i));
                 }
             } else {
-                // Negative step: decrement
                 for (int i = start; i > stop; i += step) {
-                    result.add(i);
+                    result.add(NumberValue.of(i));
                 }
             }
             
-            return result;
+            return new ListValue(result);
         });
         
-        // now() function - current datetime
+        // now() function
         builtinFunctions.put("now", (args) -> {
             if (args.size() > 1) {
                 throw new GrizzlyExecutionException(
@@ -191,12 +141,12 @@ public class GrizzlyInterpreter {
             }
             
             if (args.isEmpty()) {
-                return new com.grizzly.types.DateTimeValue(java.time.ZonedDateTime.now());
+                return new DateTimeValue(java.time.ZonedDateTime.now());
             } else {
-                String timezone = args.get(0).toString();
+                String timezone = asString(args.get(0));
                 try {
                     java.time.ZoneId zone = java.time.ZoneId.of(timezone);
-                    return new com.grizzly.types.DateTimeValue(java.time.ZonedDateTime.now(zone));
+                    return new DateTimeValue(java.time.ZonedDateTime.now(zone));
                 } catch (Exception e) {
                     throw new GrizzlyExecutionException(
                         "Invalid timezone: " + timezone + ". Use formats like 'UTC', 'America/New_York', 'Asia/Tokyo'"
@@ -205,7 +155,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        // parseDate() function - parse string to datetime
+        // parseDate() function
         builtinFunctions.put("parseDate", (args) -> {
             if (args.size() != 2 && args.size() != 3) {
                 throw new GrizzlyExecutionException(
@@ -213,42 +163,37 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String dateString = args.get(0).toString();
-            String format = args.get(1).toString();
+            String dateString = asString(args.get(0));
+            String format = asString(args.get(1));
             
             try {
                 java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern(format);
                 
                 if (args.size() == 3) {
-                    // With timezone
-                    String timezone = args.get(2).toString();
+                    String timezone = asString(args.get(2));
                     java.time.ZoneId zone = java.time.ZoneId.of(timezone);
                     
-                    // Try LocalDateTime first, then LocalDate
                     try {
                         java.time.ZonedDateTime parsed = java.time.ZonedDateTime.parse(dateString, formatter.withZone(zone));
-                        return new com.grizzly.types.DateTimeValue(parsed);
+                        return new DateTimeValue(parsed);
                     } catch (Exception e1) {
                         try {
                             java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
-                            return new com.grizzly.types.DateTimeValue(local.atZone(zone));
+                            return new DateTimeValue(local.atZone(zone));
                         } catch (Exception e2) {
                             java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
-                            return new com.grizzly.types.DateTimeValue(date.atStartOfDay(zone));
+                            return new DateTimeValue(date.atStartOfDay(zone));
                         }
                     }
                 } else {
-                    // Without timezone - use system default
                     java.time.ZoneId zone = java.time.ZoneId.systemDefault();
                     
-                    // Try LocalDateTime first, then LocalDate
                     try {
                         java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
-                        return new com.grizzly.types.DateTimeValue(local.atZone(zone));
+                        return new DateTimeValue(local.atZone(zone));
                     } catch (Exception e) {
-                        // Fall back to LocalDate (date-only format like yyyy-MM-dd)
                         java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
-                        return new com.grizzly.types.DateTimeValue(date.atStartOfDay(zone));
+                        return new DateTimeValue(date.atStartOfDay(zone));
                     }
                 }
             } catch (Exception e) {
@@ -258,7 +203,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        // formatDate() function - format datetime to string
+        // formatDate() function
         builtinFunctions.put("formatDate", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -266,17 +211,16 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
-                    "formatDate() first argument must be a datetime, got: " + args.get(0).getClass().getSimpleName()
+                    "formatDate() first argument must be a datetime, got: " + args.get(0).typeName()
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            String format = args.get(1).toString();
+            String format = asString(args.get(1));
             
             try {
-                return dt.format(format);
+                return new StringValue(dt.format(format));
             } catch (Exception e) {
                 throw new GrizzlyExecutionException(
                     "Invalid date format '" + format + "': " + e.getMessage()
@@ -292,14 +236,13 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
                     "addDays() first argument must be a datetime"
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            long days = (long) toNumber(args.get(1));
+            long days = toLong(args.get(1));
             return dt.addDays(days);
         });
         
@@ -311,14 +254,13 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
                     "addMonths() first argument must be a datetime"
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            long months = (long) toNumber(args.get(1));
+            long months = toLong(args.get(1));
             return dt.addMonths(months);
         });
         
@@ -330,14 +272,13 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
                     "addYears() first argument must be a datetime"
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            long years = (long) toNumber(args.get(1));
+            long years = toLong(args.get(1));
             return dt.addYears(years);
         });
         
@@ -349,14 +290,13 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
                     "addHours() first argument must be a datetime"
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            long hours = (long) toNumber(args.get(1));
+            long hours = toLong(args.get(1));
             return dt.addHours(hours);
         });
         
@@ -368,36 +308,17 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DateTimeValue)) {
+            if (!(args.get(0) instanceof DateTimeValue dt)) {
                 throw new GrizzlyExecutionException(
                     "addMinutes() first argument must be a datetime"
                 );
             }
             
-            com.grizzly.types.DateTimeValue dt = (com.grizzly.types.DateTimeValue) args.get(0);
-            long minutes = (long) toNumber(args.get(1));
+            long minutes = toLong(args.get(1));
             return dt.addMinutes(minutes);
         });
         
-        // ─────────────────────────────────────────────────────────────────────
-        // DECIMAL FUNCTIONS - Exact precision for money calculations
-        // ─────────────────────────────────────────────────────────────────────
-        
-        /**
-         * Decimal(value) - Create a decimal with exact precision.
-         * 
-         * <p><b>Always use strings!</b> This avoids float errors.
-         * 
-         * <p>Examples:
-         * <pre>{@code
-         * amount = Decimal("1234.56")   // GOOD
-         * rate = Decimal("0.05")        // GOOD
-         * bad = Decimal(1234.56)        // BAD - still uses float!
-         * }</pre>
-         * 
-         * @param args Single argument - string or number to convert
-         * @return DecimalValue with exact precision
-         */
+        // Decimal() function
         builtinFunctions.put("Decimal", (args) -> {
             if (args.size() != 1) {
                 throw new GrizzlyExecutionException(
@@ -405,36 +326,23 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            Object value = args.get(0);
+            Value value = args.get(0);
             
-            if (value instanceof String) {
-                return new com.grizzly.types.DecimalValue((String) value);
-            } else if (value instanceof Integer) {
-                return new com.grizzly.types.DecimalValue((Integer) value);
-            } else if (value instanceof Long) {
-                return new com.grizzly.types.DecimalValue(((Long) value).intValue());
-            } else if (value instanceof Double || value instanceof Float) {
-                // Allow but warn - defeats the purpose!
-                return new com.grizzly.types.DecimalValue(String.valueOf(value));
-            } else {
-                throw new GrizzlyExecutionException(
-                    "Decimal() argument must be a string or number, got: " + value.getClass().getSimpleName()
+            return switch (value) {
+                case StringValue s -> new DecimalValue(s.value());
+                case NumberValue n -> {
+                    if (n.isInteger()) {
+                        yield new DecimalValue(n.asInt());
+                    }
+                    yield new DecimalValue(String.valueOf(n.asDouble()));
+                }
+                default -> throw new GrizzlyExecutionException(
+                    "Decimal() argument must be a string or number, got: " + value.typeName()
                 );
-            }
+            };
         });
         
-        /**
-         * round(decimal, places) - Round decimal to specified decimal places.
-         * 
-         * <p>Examples:
-         * <pre>{@code
-         * round(Decimal("1234.5678"), 2)  // 1234.57
-         * round(Decimal("1234.5678"), 0)  // 1235
-         * }</pre>
-         * 
-         * @param args [0] DecimalValue to round, [1] number of decimal places
-         * @return Rounded DecimalValue
-         */
+        // round() function
         builtinFunctions.put("round", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -442,34 +350,17 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            if (!(args.get(0) instanceof com.grizzly.types.DecimalValue)) {
+            if (!(args.get(0) instanceof DecimalValue decimal)) {
                 throw new GrizzlyExecutionException(
-                    "round() first argument must be a Decimal, got: " + 
-                    args.get(0).getClass().getSimpleName()
+                    "round() first argument must be a Decimal, got: " + args.get(0).typeName()
                 );
             }
             
-            com.grizzly.types.DecimalValue decimal = (com.grizzly.types.DecimalValue) args.get(0);
-            int places = ((Number) args.get(1)).intValue();
-            
+            int places = toInt(args.get(1));
             return decimal.round(places);
         });
         
-        /**
-         * str(value) - Convert any value to string.
-         * 
-         * <p>Essential for converting Decimals and other objects to strings for JSON output.
-         * 
-         * <p>Examples:
-         * <pre>{@code
-         * str(Decimal("1234.56"))  // "1234.56"
-         * str(123)                 // "123"
-         * str(True)                // "True"
-         * }</pre>
-         * 
-         * @param args Single argument - value to convert to string
-         * @return String representation of the value
-         */
+        // str() function
         builtinFunctions.put("str", (args) -> {
             if (args.size() != 1) {
                 throw new GrizzlyExecutionException(
@@ -477,40 +368,23 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            Object value = args.get(0);
+            Value value = args.get(0);
             
-            if (value == null) {
-                return "None";
-            } else if (value instanceof Boolean) {
-                return (Boolean) value ? "True" : "False";
-            } else {
-                return value.toString();
-            }
+            return switch (value) {
+                case NullValue ignored -> new StringValue("None");
+                case BoolValue b -> new StringValue(b.value() ? "True" : "False");
+                default -> new StringValue(value.toString());
+            };
         });
     }
     
     /**
-     * Register module functions (re, decimal, etc.)
-     * 
-     * <p>Modules allow Python-style syntax: `import re` then `re.match()`
-     * 
-     * <p>Supported modules:
-     * <ul>
-     *   <li><b>re</b> - Regular expressions (match, search, findall, sub, split)</li>
-     * </ul>
+     * Register module functions (re, etc.)
      */
     private void registerModules() {
-        // ═══════════════════════════════════════════════════════════════════════
-        // RE MODULE - Regular expressions (100% Python-compatible!)
-        // ═══════════════════════════════════════════════════════════════════════
-        
         Map<String, BuiltinFunction> reModule = new HashMap<>();
         
-        /**
-         * re.match(pattern, text) - Check if text matches pattern from start.
-         * 
-         * <p>Python-compatible! Use with: `import re` then `re.match()`
-         */
+        // re.match()
         reModule.put("match", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -518,20 +392,20 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String pattern = String.valueOf(args.get(0));
-            String text = String.valueOf(args.get(1));
+            String pattern = asString(args.get(0));
+            String text = asString(args.get(1));
             
             try {
                 java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
                 java.util.regex.Matcher m = p.matcher(text);
                 
                 if (m.matches()) {
-                    Map<String, Object> match = new HashMap<>();
-                    match.put("matched", true);
-                    match.put("value", text);
+                    DictValue match = DictValue.empty();
+                    match.put("matched", BoolValue.TRUE);
+                    match.put("value", new StringValue(text));
                     return match;
                 }
-                return null;
+                return NullValue.INSTANCE;
             } catch (java.util.regex.PatternSyntaxException e) {
                 throw new GrizzlyExecutionException(
                     "Invalid regex pattern: " + pattern + " - " + e.getMessage()
@@ -539,11 +413,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        /**
-         * re.search(pattern, text) - Find first occurrence of pattern in text.
-         * 
-         * <p>Python-compatible! Use with: `import re` then `re.search()`
-         */
+        // re.search()
         reModule.put("search", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -551,22 +421,22 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String pattern = String.valueOf(args.get(0));
-            String text = String.valueOf(args.get(1));
+            String pattern = asString(args.get(0));
+            String text = asString(args.get(1));
             
             try {
                 java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
                 java.util.regex.Matcher m = p.matcher(text);
                 
                 if (m.find()) {
-                    Map<String, Object> match = new HashMap<>();
-                    match.put("matched", true);
-                    match.put("value", m.group());
-                    match.put("start", m.start());
-                    match.put("end", m.end());
+                    DictValue match = DictValue.empty();
+                    match.put("matched", BoolValue.TRUE);
+                    match.put("value", new StringValue(m.group()));
+                    match.put("start", NumberValue.of(m.start()));
+                    match.put("end", NumberValue.of(m.end()));
                     return match;
                 }
-                return null;
+                return NullValue.INSTANCE;
             } catch (java.util.regex.PatternSyntaxException e) {
                 throw new GrizzlyExecutionException(
                     "Invalid regex pattern: " + pattern + " - " + e.getMessage()
@@ -574,11 +444,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        /**
-         * re.findall(pattern, text) - Find all occurrences of pattern.
-         * 
-         * <p>Python-compatible! Use with: `import re` then `re.findall()`
-         */
+        // re.findall()
         reModule.put("findall", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -586,19 +452,19 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String pattern = String.valueOf(args.get(0));
-            String text = String.valueOf(args.get(1));
-            List<String> matches = new ArrayList<>();
+            String pattern = asString(args.get(0));
+            String text = asString(args.get(1));
+            List<Value> matches = new ArrayList<>();
             
             try {
                 java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
                 java.util.regex.Matcher m = p.matcher(text);
                 
                 while (m.find()) {
-                    matches.add(m.group());
+                    matches.add(new StringValue(m.group()));
                 }
                 
-                return matches;
+                return new ListValue(matches);
             } catch (java.util.regex.PatternSyntaxException e) {
                 throw new GrizzlyExecutionException(
                     "Invalid regex pattern: " + pattern + " - " + e.getMessage()
@@ -606,11 +472,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        /**
-         * re.sub(pattern, replacement, text) - Replace pattern matches with replacement.
-         * 
-         * <p>Python-compatible! Use with: `import re` then `re.sub()`
-         */
+        // re.sub()
         reModule.put("sub", (args) -> {
             if (args.size() != 3) {
                 throw new GrizzlyExecutionException(
@@ -618,12 +480,12 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String pattern = String.valueOf(args.get(0));
-            String replacement = String.valueOf(args.get(1));
-            String text = String.valueOf(args.get(2));
+            String pattern = asString(args.get(0));
+            String replacement = asString(args.get(1));
+            String text = asString(args.get(2));
             
             try {
-                return text.replaceAll(pattern, replacement);
+                return new StringValue(text.replaceAll(pattern, replacement));
             } catch (java.util.regex.PatternSyntaxException e) {
                 throw new GrizzlyExecutionException(
                     "Invalid regex pattern: " + pattern + " - " + e.getMessage()
@@ -631,11 +493,7 @@ public class GrizzlyInterpreter {
             }
         });
         
-        /**
-         * re.split(pattern, text) - Split text by pattern.
-         * 
-         * <p>Python-compatible! Use with: `import re` then `re.split()`
-         */
+        // re.split()
         reModule.put("split", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
@@ -643,12 +501,16 @@ public class GrizzlyInterpreter {
                 );
             }
             
-            String pattern = String.valueOf(args.get(0));
-            String text = String.valueOf(args.get(1));
+            String pattern = asString(args.get(0));
+            String text = asString(args.get(1));
             
             try {
                 String[] parts = text.split(pattern);
-                return java.util.Arrays.asList(parts);
+                List<Value> result = new ArrayList<>();
+                for (String part : parts) {
+                    result.add(new StringValue(part));
+                }
+                return new ListValue(result);
             } catch (java.util.regex.PatternSyntaxException e) {
                 throw new GrizzlyExecutionException(
                     "Invalid regex pattern: " + pattern + " - " + e.getMessage()
@@ -659,30 +521,28 @@ public class GrizzlyInterpreter {
         modules.put("re", reModule);
     }
     
-    private Object executeFunction(FunctionDef function, ExecutionContext context) {
+    private Value executeFunction(FunctionDef function, ExecutionContext context) {
         for (Statement stmt : function.body()) {
-            Object result = executeStatement(stmt, context);
+            Value result = executeStatement(stmt, context);
             
             if (stmt instanceof ReturnStatement) {
                 return result;
             }
         }
         
-        return null;
+        return NullValue.INSTANCE;
     }
     
-    private Object executeStatement(Statement stmt, ExecutionContext context) {
+    private Value executeStatement(Statement stmt, ExecutionContext context) {
         return switch (stmt) {
             case ImportStatement i -> {
-                // Import statements are no-ops at runtime
-                // Modules are already registered, just validate the module exists
                 if (!modules.containsKey(i.moduleName())) {
                     throw new GrizzlyExecutionException(
                         "Unknown module: " + i.moduleName(),
                         i.lineNumber()
                     );
                 }
-                yield null;
+                yield NullValue.INSTANCE;
             }
             case Assignment a -> executeAssignment(a, context);
             case ReturnStatement r -> evaluateExpression(r.value(), context);
@@ -699,11 +559,13 @@ public class GrizzlyInterpreter {
         };
     }
     
-    private Object executeAssignment(Assignment assignment, ExecutionContext context) {
+    private Value executeAssignment(Assignment assignment, ExecutionContext context) {
         try {
-            Object value = evaluateExpression(assignment.value(), context);
+            Value value = evaluateExpression(assignment.value(), context);
             setTarget(assignment.target(), value, context);
             return value;
+        } catch (GrizzlyExecutionException e) {
+            throw e;
         } catch (Exception e) {
             throw new GrizzlyExecutionException(
                 "Error in assignment: " + e.getMessage(),
@@ -712,67 +574,10 @@ public class GrizzlyInterpreter {
         }
     }
     
-    /**
-     * Execute a function call - either built-in or user-defined.
-     * 
-     * <p><b>Checks built-ins first!</b>
-     * <pre>{@code
-     * len(items)
-     * 
-     * Steps:
-     * 1. Check: Is "len" a built-in? YES!
-     * 2. Evaluate arguments: items → [1, 2, 3]
-     * 3. Call built-in len function
-     * 4. Return: 3
-     * }</pre>
-     * 
-     * <p><b>User-defined function:</b>
-     * <pre>{@code
-     * result = helper(INPUT)
-     * 
-     * Steps:
-     * 1. Check built-ins: Not found
-     * 2. Find "helper" function in program
-     * 3. Create NEW context (fresh variable space)
-     * 4. Evaluate INPUT → map object
-     * 5. Bind: param name → INPUT value
-     * 6. Execute helper's body in new context
-     * 7. Return helper's return value
-     * }</pre>
-     * 
-     * <p><b>Why new context?</b> Function isolation!
-     * <pre>{@code
-     * x = 10
-     * 
-     * def helper(INPUT):
-     *     x = 20        // This x is separate!
-     *     return x
-     * 
-     * result = helper(INPUT)  // result = 20
-     * print(x)                // x still = 10 (unchanged!)
-     * }</pre>
-     * 
-     * <p><b>Multiple parameters:</b>
-     * <pre>{@code
-     * def process(data, mode):
-     *     ...
-     * 
-     * process(INPUT, "fast")
-     * 
-     * Binds:
-     * data → INPUT value
-     * mode → "fast"
-     * }</pre>
-     * 
-     * @param call The FunctionCall AST node (function name and arguments)
-     * @param context Current execution context
-     * @return The function's return value
-     */
-    private Object executeFunctionCall(FunctionCall call, ExecutionContext context) {
+    private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
-            // Check if it's a builtin function
             if (builtinFunctions.containsKey(call.functionName())) {
-                List<Object> args = new ArrayList<>();
+                List<Value> args = new ArrayList<>();
                 for (Expression argExpr : call.args()) {
                     args.add(evaluateExpression(argExpr, context));
                 }
@@ -790,7 +595,7 @@ public class GrizzlyInterpreter {
             ExecutionContext funcContext = new ExecutionContext();
             
             for (int i = 0; i < func.params().size(); i++) {
-                Object argValue = evaluateExpression(call.args().get(i), context);
+                Value argValue = evaluateExpression(call.args().get(i), context);
                 funcContext.set(func.params().get(i), argValue);
             }
             
@@ -806,148 +611,45 @@ public class GrizzlyInterpreter {
         }
     }
     
-    /**
-     * Execute an if/else statement - choose which branch to run.
-     * 
-     * <p><b>Simple if (no else):</b>
-     * <pre>{@code
-     * if age >= 18:
-     *     status = "adult"
-     * 
-     * Steps:
-     * 1. Evaluate condition: age >= 18 → true or false
-     * 2. If true: execute "status = adult"
-     * 3. If false: skip the block
-     * 4. Continue after if
-     * }</pre>
-     * 
-     * <p><b>If with else:</b>
-     * <pre>{@code
-     * if age >= 18:
-     *     status = "adult"
-     * else:
-     *     status = "minor"
-     * 
-     * Steps:
-     * 1. Evaluate: age >= 18
-     * 2. If true: run "adult" block, skip else
-     * 3. If false: skip if block, run "minor" block
-     * }</pre>
-     * 
-     * <p><b>Early return in if block:</b>
-     * <pre>{@code
-     * if found:
-     *     return result  // Exits immediately!
-     * more = code        // This won't run if we returned
-     * }</pre>
-     * 
-     * <p><b>How conditions become true/false:</b>
-     * <ul>
-     *   <li>{@code null} → false</li>
-     *   <li>{@code true/false} → itself</li>
-     *   <li>{@code 0} → false, any other number → true</li>
-     *   <li>{@code ""} (empty string) → false, any text → true</li>
-     * </ul>
-     * 
-     * @param ifStmt The IfStatement AST node (condition, then block, else block)
-     * @param context Execution context
-     * @return null normally, or return value if block contains return statement
-     */
-    /**
-     * Execute an if/elif/else statement - choose which branch to run.
-     * 
-     * <p><b>Simple if (no else):</b>
-     * <pre>{@code
-     * if age >= 18:
-     *     status = "adult"
-     * 
-     * Steps:
-     * 1. Evaluate condition: age >= 18 → true or false
-     * 2. If true: execute "status = adult"
-     * 3. If false: skip the block
-     * 4. Continue after if
-     * }</pre>
-     * 
-     * <p><b>If with elif (NEW!):</b>
-     * <pre>{@code
-     * if x < 0:
-     *     status = "negative"
-     * elif x == 0:
-     *     status = "zero"
-     * elif x == 1:
-     *     status = "one"
-     * else:
-     *     status = "many"
-     * 
-     * Steps:
-     * 1. Evaluate first condition: x < 0
-     * 2. If true: run "negative" block, SKIP all elif/else
-     * 3. If false: try first elif: x == 0
-     * 4. If true: run "zero" block, SKIP remaining elif/else
-     * 5. If false: try second elif: x == 1
-     * 6. If true: run "one" block, SKIP else
-     * 7. If false: run else block
-     * }</pre>
-     * 
-     * <p><b>Early return in any branch:</b>
-     * <pre>{@code
-     * if found:
-     *     return result  // Exits immediately!
-     * elif fallback:
-     *     return default // Also exits immediately!
-     * }</pre>
-     * 
-     * @param ifStmt The IfStatement AST node
-     * @param context Execution context
-     * @return null normally, or return value if block contains return statement
-     */
-    private Object executeIf(IfStatement ifStmt, ExecutionContext context) {
+    private Value executeIf(IfStatement ifStmt, ExecutionContext context) {
         try {
-            // Try main if condition
-            Object conditionValue = evaluateExpression(ifStmt.condition(), context);
-            boolean condition = isTrue(conditionValue);
+            Value conditionValue = evaluateExpression(ifStmt.condition(), context);
             
-            if (condition) {
-                // Execute if block
+            if (conditionValue.isTruthy()) {
                 for (Statement stmt : ifStmt.thenBlock()) {
-                    Object result = executeStatement(stmt, context);
+                    Value result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
                         return result;
                     }
                 }
-                return null; // Executed if block, skip elif/else
+                return NullValue.INSTANCE;
             }
             
-            // Try elif branches (if any)
             for (IfStatement.ElifBranch elifBranch : ifStmt.elifBranches()) {
-                Object elifConditionValue = evaluateExpression(elifBranch.condition(), context);
-                boolean elifCondition = isTrue(elifConditionValue);
+                Value elifConditionValue = evaluateExpression(elifBranch.condition(), context);
                 
-                if (elifCondition) {
-                    // Execute this elif block
+                if (elifConditionValue.isTruthy()) {
                     for (Statement stmt : elifBranch.statements()) {
-                        Object result = executeStatement(stmt, context);
+                        Value result = executeStatement(stmt, context);
                         if (stmt instanceof ReturnStatement) {
                             return result;
                         }
                     }
-                    return null; // Executed elif block, skip remaining elif/else
+                    return NullValue.INSTANCE;
                 }
             }
             
-            // Execute else block (if present and no if/elif matched)
             if (ifStmt.elseBlock() != null) {
                 for (Statement stmt : ifStmt.elseBlock()) {
-                    Object result = executeStatement(stmt, context);
+                    Value result = executeStatement(stmt, context);
                     if (stmt instanceof ReturnStatement) {
                         return result;
                     }
                 }
             }
             
-            return null;
+            return NullValue.INSTANCE;
         } catch (com.grizzly.exception.BreakException | com.grizzly.exception.ContinueException e) {
-            // Let these pass through to the enclosing loop
             throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
@@ -959,112 +661,44 @@ public class GrizzlyInterpreter {
         }
     }
     
-    /**
-     * Execute a for loop: {@code for item in items:}
-     * 
-     * <p>Iterates over a list, executing the loop body once for each element.
-     * The loop variable is set to each element in sequence.
-     * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * // Simple iteration
-     * for customer in INPUT.customers:
-     *     OUTPUT["names"].append(customer.name)
-     * // Sets customer to each element, executes body
-     * 
-     * // Early return
-     * for item in items:
-     *     if item.id == searchId:
-     *         return item  // Exits loop immediately
-     * 
-     * // Nested loops
-     * for dept in INPUT.departments:
-     *     for emp in dept.employees:
-     *         OUTPUT["all"].append(emp.name)
-     * }</pre>
-     * 
-     * <p><b>Execution flow:</b>
-     * <ol>
-     *   <li>Evaluate iterable expression to get list</li>
-     *   <li>For each item: set variable in context, execute body</li>
-     *   <li>If return statement encountered, propagate return value</li>
-     * </ol>
-     * 
-     * @param forLoop The ForLoop AST node
-     * @param context Execution context for variable storage
-     * @return null if loop completes, or return value if body contains return
-     * @throws GrizzlyExecutionException if iterable is invalid
-     */
-    /**
-     * Execute a for loop with support for break and continue.
-     * 
-     * <p><b>Break example:</b>
-     * <pre>{@code
-     * for item in items:
-     *     if item.id == searchId:
-     *         break  // Exit loop immediately
-     * }</pre>
-     * 
-     * <p><b>Continue example:</b>
-     * <pre>{@code
-     * for num in range(10):
-     *     if num % 2 == 0:
-     *         continue  // Skip even numbers
-     *     OUTPUT["odds"].append(num)
-     * }</pre>
-     * 
-     * @param forLoop The ForLoop AST node
-     * @param context Execution context
-     * @return null if loop completes, or return value if body contains return
-     */
-    private Object executeForLoop(ForLoop forLoop, ExecutionContext context) {
+    private Value executeForLoop(ForLoop forLoop, ExecutionContext context) {
         try {
-            Object iterableObj = evaluateExpression(forLoop.iterable(), context);
+            Value iterableVal = evaluateExpression(forLoop.iterable(), context);
             
-            if (iterableObj == null) {
+            if (!(iterableVal instanceof ListValue list)) {
+                if (iterableVal instanceof NullValue) {
+                    throw new GrizzlyExecutionException(
+                        "Cannot iterate over null",
+                        forLoop.lineNumber()
+                    );
+                }
                 throw new GrizzlyExecutionException(
-                    "Cannot iterate over null",
+                    "Can only iterate over lists, got: " + iterableVal.typeName(),
                     forLoop.lineNumber()
                 );
             }
             
-            List<?> items;
-            if (iterableObj instanceof List) {
-                items = (List<?>) iterableObj;
-            } else {
-                throw new GrizzlyExecutionException(
-                    "Can only iterate over lists, got: " + iterableObj.getClass().getSimpleName(),
-                    forLoop.lineNumber()
-                );
-            }
-            
-            // Iterate over items - labeled for break/continue
-            itemLoop: for (Object item : items) {
+            itemLoop: for (Value item : list) {
                 context.set(forLoop.variable(), item);
                 
-                // Execute loop body statements
                 for (Statement stmt : forLoop.body()) {
                     try {
-                        Object result = executeStatement(stmt, context);
+                        Value result = executeStatement(stmt, context);
                         
-                        // Handle return statements
                         if (stmt instanceof ReturnStatement) {
                             return result;
                         }
                     } catch (com.grizzly.exception.BreakException e) {
-                        // Break out of item loop
                         break itemLoop;
                     } catch (com.grizzly.exception.ContinueException e) {
-                        // Continue to next item
                         continue itemLoop;
                     }
                 }
             }
             
-            return null;
+            return NullValue.INSTANCE;
             
         } catch (com.grizzly.exception.BreakException | com.grizzly.exception.ContinueException e) {
-            // These should have been caught by the loop above
             throw new GrizzlyExecutionException(
                 "break/continue outside of loop at line " + forLoop.lineNumber(),
                 forLoop.lineNumber()
@@ -1079,14 +713,14 @@ public class GrizzlyInterpreter {
         }
     }
     
-    private Object evaluateExpression(Expression expr, ExecutionContext context) {
+    private Value evaluateExpression(Expression expr, ExecutionContext context) {
         try {
             return switch (expr) {
-                case NumberLiteral n -> n.value();
-                case StringLiteral s -> s.value();
-                case BooleanLiteral b -> b.value();
+                case NumberLiteral n -> new NumberValue(n.value());
+                case StringLiteral s -> new StringValue(s.value());
+                case BooleanLiteral b -> BoolValue.of(b.value());
                 case Identifier i -> context.get(i.name());
-                case DictLiteral d -> new HashMap<String, Object>();
+                case DictLiteral d -> DictValue.empty();
                 case ListLiteral l -> evaluateListLiteral(l, context);
                 case DictAccess d -> evaluateDictAccess(d, context);
                 case AttrAccess a -> evaluateAttrAccess(a, context);
@@ -1106,129 +740,48 @@ public class GrizzlyInterpreter {
         }
     }
     
-    /**
-     * Get a value from a dict or list using bracket notation.
-     * 
-     * <p><b>Works for both dicts AND lists!</b>
-     * 
-     * <p><b>Dict example:</b>
-     * <pre>{@code
-     * value = OUTPUT["name"]
-     * 
-     * Steps:
-     * 1. Evaluate OUTPUT → get the dict object
-     * 2. Evaluate "name" → get string "name"
-     * 3. Call dict.get("name") → return value
-     * }</pre>
-     * 
-     * <p><b>List with positive index:</b>
-     * <pre>{@code
-     * first = items[0]    // First element
-     * second = items[1]   // Second element
-     * }</pre>
-     * 
-     * <p><b>List with NEGATIVE index (Python-style!):</b>
-     * <pre>{@code
-     * last = items[-1]      // Last element
-     * secondLast = items[-2] // Second-to-last element
-     * 
-     * How it works:
-     * items = ["a", "b", "c", "d"]
-     * items[-1] → items[4 + (-1)] → items[3] → "d"
-     * items[-2] → items[4 + (-2)] → items[2] → "c"
-     * }</pre>
-     * 
-     * <p><b>Chained access:</b>
-     * <pre>{@code
-     * city = INPUT["user"]["address"]["city"]
-     * 
-     * Steps:
-     * 1. Get INPUT["user"] → dict
-     * 2. Get that["address"] → dict
-     * 3. Get that["city"] → value
-     * }</pre>
-     * 
-     * @param dictAccess The DictAccess AST node (object and key expressions)
-     * @param context Execution context
-     * @return The value at that key/index
-     */
-    @SuppressWarnings("unchecked")
-    private Object evaluateDictAccess(DictAccess dictAccess, ExecutionContext context) {
-        Object obj = evaluateExpression(dictAccess.object(), context);
-        Object key = evaluateExpression(dictAccess.key(), context);
+    private Value evaluateDictAccess(DictAccess dictAccess, ExecutionContext context) {
+        Value obj = evaluateExpression(dictAccess.object(), context);
+        Value keyVal = evaluateExpression(dictAccess.key(), context);
         
-        if (obj instanceof Map) {
-            return ((Map<String, Object>) obj).get(key.toString());
-        } else if (obj instanceof List) {
-            List<?> list = (List<?>) obj;
-            int index = ((Number) toNumber(key)).intValue();
-            
-            // Handle negative indices: -1 = last, -2 = second-to-last, etc.
-            if (index < 0) {
-                index = list.size() + index;
+        return switch (obj) {
+            case DictValue dict -> {
+                String key = asString(keyVal);
+                yield dict.get(key);
             }
-            
-            // Bounds check
-            if (index < 0 || index >= list.size()) {
-                throw new GrizzlyExecutionException(
-                    "List index out of range: " + ((Number) toNumber(key)).intValue() + 
-                    " (list size: " + list.size() + ")"
-                );
+            case ListValue list -> {
+                int index = toInt(keyVal);
+                if (index < 0) {
+                    index = list.size() + index;
+                }
+                if (index < 0 || index >= list.size()) {
+                    throw new GrizzlyExecutionException(
+                        "List index out of range: " + toInt(keyVal) + " (list size: " + list.size() + ")"
+                    );
+                }
+                yield list.get(index);
             }
-            
-            return list.get(index);
+            default -> throw new GrizzlyExecutionException(
+                "Cannot access key on object of type " + obj.typeName()
+            );
+        };
+    }
+    
+    private Value evaluateAttrAccess(AttrAccess attrAccess, ExecutionContext context) {
+        Value obj = evaluateExpression(attrAccess.object(), context);
+        
+        if (obj instanceof DictValue dict) {
+            return dict.get(attrAccess.attr());
         }
         
         throw new GrizzlyExecutionException(
-            "Cannot access key '" + key + "' on object of type " + 
-            (obj != null ? obj.getClass().getSimpleName() : "null")
+            "Cannot access attribute '" + attrAccess.attr() + "' on object of type " + obj.typeName()
         );
     }
     
-    @SuppressWarnings("unchecked")
-    private Object evaluateAttrAccess(AttrAccess attrAccess, ExecutionContext context) {
-        Object obj = evaluateExpression(attrAccess.object(), context);
-        
-        if (obj instanceof Map) {
-            return ((Map<String, Object>) obj).get(attrAccess.attr());
-        }
-        
-        throw new GrizzlyExecutionException(
-            "Cannot access attribute '" + attrAccess.attr() + "' on object of type " +
-            (obj != null ? obj.getClass().getSimpleName() : "null")
-        );
-    }
-    
-    /**
-     * Evaluate binary operations: +, -, *, /, //, %, **, ==, !=, <, >, <=, >=
-     * 
-     * <p><b>Smart behavior:</b>
-     * <ul>
-     *   <li>+ with strings → concatenation: {@code "Hi" + "!" = "Hi!"}</li>
-     *   <li>+ with lists → concatenation: {@code [1,2] + [3,4] = [1,2,3,4]}</li>
-     *   <li>+ with numbers → addition: {@code 5 + 3 = 8}</li>
-     *   <li>* with string and number → repetition: {@code 3 * "ha" = "hahaha"}</li>
-     *   <li>* with list and number → repetition: {@code 2 * [1,2] = [1,2,1,2]}</li>
-     *   <li>* with numbers → multiplication: {@code 5 * 3 = 15}</li>
-     * </ul>
-     * 
-     * <p><b>Math examples:</b>
-     * <pre>{@code
-     * 2 + 3 * 4    → 14 (precedence handled by parser)
-     * 10 - 5       → 5
-     * 8 / 5        → 1.6 (division always returns float)
-     * 17 // 3      → 5 (floor division)
-     * 17 % 3       → 2 (remainder)
-     * 5 ** 2       → 25 (power)
-     * }</pre>
-     * 
-     * @param binaryOp The BinaryOp AST node
-     * @param context Execution context
-     * @return Result of the operation
-     */
-    private Object evaluateBinaryOp(BinaryOp binaryOp, ExecutionContext context) {
-        Object left = evaluateExpression(binaryOp.left(), context);
-        Object right = evaluateExpression(binaryOp.right(), context);
+    private Value evaluateBinaryOp(BinaryOp binaryOp, ExecutionContext context) {
+        Value left = evaluateExpression(binaryOp.left(), context);
+        Value right = evaluateExpression(binaryOp.right(), context);
         
         String operator = binaryOp.operator();
         
@@ -1240,201 +793,118 @@ public class GrizzlyInterpreter {
             case "//" -> evaluateNumericOp(left, right, "//");
             case "%" -> evaluateNumericOp(left, right, "%");
             case "**" -> evaluateNumericOp(left, right, "**");
-            case "==" -> evaluateEquality(left, right, true);
-            case "!=" -> evaluateEquality(left, right, false);
-            case "<", ">", "<=", ">=" -> evaluateComparison(left, right, operator);
+            case "==" -> BoolValue.of(evaluateEquality(left, right, true));
+            case "!=" -> BoolValue.of(evaluateEquality(left, right, false));
+            case "<", ">", "<=", ">=" -> BoolValue.of(evaluateComparison(left, right, operator));
             default -> throw new GrizzlyExecutionException("Unknown operator: " + operator);
         };
     }
     
-    /**
-     * Evaluate equality (== or !=) with numeric type coercion.
-     * 
-     * <p>Handles numeric comparisons properly: 0 == 0.0, "5" == 5, etc.
-     * 
-     * @param left Left operand
-     * @param right Right operand  
-     * @param checkEqual true for ==, false for !=
-     * @return boolean result
-     */
-    private boolean evaluateEquality(Object left, Object right, boolean checkEqual) {
-        // Try numeric comparison if both could be numbers
-        boolean leftIsNumeric = left instanceof Number || 
-                               (left instanceof String && isNumericString((String) left));
-        boolean rightIsNumeric = right instanceof Number || 
-                                (right instanceof String && isNumericString((String) right));
+    private boolean evaluateEquality(Value left, Value right, boolean checkEqual) {
+        if (left instanceof NumberValue ln && right instanceof NumberValue rn) {
+            boolean equal = Math.abs(ln.asDouble() - rn.asDouble()) < 1e-10;
+            return checkEqual ? equal : !equal;
+        }
         
-        if (leftIsNumeric && rightIsNumeric) {
+        if (left instanceof StringValue ls && right instanceof NumberValue) {
             try {
-                double leftNum = toNumber(left);
-                double rightNum = toNumber(right);
+                double leftNum = Double.parseDouble(ls.value());
+                double rightNum = ((NumberValue) right).asDouble();
                 boolean equal = Math.abs(leftNum - rightNum) < 1e-10;
                 return checkEqual ? equal : !equal;
-            } catch (Exception e) {
-                // Fall through to object equality
+            } catch (NumberFormatException e) {
+                // Fall through
             }
         }
         
-        // Regular object equality
-        boolean equal = java.util.Objects.equals(left, right);
+        if (left instanceof NumberValue && right instanceof StringValue rs) {
+            try {
+                double leftNum = ((NumberValue) left).asDouble();
+                double rightNum = Double.parseDouble(rs.value());
+                boolean equal = Math.abs(leftNum - rightNum) < 1e-10;
+                return checkEqual ? equal : !equal;
+            } catch (NumberFormatException e) {
+                // Fall through
+            }
+        }
+        
+        boolean equal = left.equals(right);
         return checkEqual ? equal : !equal;
     }
     
-    /**
-     * Check if a string represents a number.
-     */
-    private boolean isNumericString(String s) {
-        if (s == null || s.isEmpty()) return false;
-        try {
-            Double.parseDouble(s);
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
-        }
-    }
-    
-    /**
-     * Handle + operator: concatenation for strings/lists, addition for numbers/decimals
-     */
-    @SuppressWarnings("unchecked")
-    private Object evaluatePlus(Object left, Object right) {
-        // DecimalValue addition (exact precision!)
-        if (left instanceof com.grizzly.types.DecimalValue && right instanceof com.grizzly.types.DecimalValue) {
-            return ((com.grizzly.types.DecimalValue) left).add((com.grizzly.types.DecimalValue) right);
+    private Value evaluatePlus(Value left, Value right) {
+        if (left instanceof DecimalValue ld && right instanceof DecimalValue rd) {
+            return ld.add(rd);
         }
         
-        // String concatenation
-        if (left instanceof String || right instanceof String) {
-            return left.toString() + right.toString();
+        if (left instanceof StringValue || right instanceof StringValue) {
+            String ls = left instanceof StringValue s ? s.value() : left.toString();
+            String rs = right instanceof StringValue s ? s.value() : right.toString();
+            return new StringValue(ls + rs);
         }
         
-        // List concatenation: [1,2] + [3,4] = [1,2,3,4]
-        if (left instanceof List && right instanceof List) {
-            List<Object> result = new ArrayList<>((List<?>) left);
-            result.addAll((List<?>) right);
-            return result;
+        if (left instanceof ListValue ll && right instanceof ListValue rl) {
+            List<Value> result = new ArrayList<>(ll.items());
+            result.addAll(rl.items());
+            return new ListValue(result);
         }
         
-        // Numeric addition
         return evaluateNumericOp(left, right, "+");
     }
     
-    /**
-     * Handle * operator: repetition for strings/lists, multiplication for numbers
-     */
-    @SuppressWarnings("unchecked")
-    private Object evaluateStar(Object left, Object right) {
-        // String repetition: 3 * "ha" = "hahaha"
-        if (left instanceof Number && right instanceof String) {
-            int count = ((Number) left).intValue();
-            return ((String) right).repeat(Math.max(0, count));
+    private Value evaluateStar(Value left, Value right) {
+        if (left instanceof NumberValue n && right instanceof StringValue s) {
+            int count = n.asInt();
+            return new StringValue(s.value().repeat(Math.max(0, count)));
         }
-        if (left instanceof String && right instanceof Number) {
-            int count = ((Number) right).intValue();
-            return ((String) left).repeat(Math.max(0, count));
+        if (left instanceof StringValue s && right instanceof NumberValue n) {
+            int count = n.asInt();
+            return new StringValue(s.value().repeat(Math.max(0, count)));
         }
         
-        // List repetition: 2 * [1,2] = [1,2,1,2]
-        if (left instanceof Number && right instanceof List) {
-            int count = ((Number) left).intValue();
-            List<Object> list = (List<Object>) right;
-            List<Object> result = new ArrayList<>();
+        if (left instanceof NumberValue n && right instanceof ListValue l) {
+            int count = n.asInt();
+            List<Value> result = new ArrayList<>();
             for (int i = 0; i < Math.max(0, count); i++) {
-                result.addAll(list);
+                result.addAll(l.items());
             }
-            return result;
+            return new ListValue(result);
         }
-        if (left instanceof List && right instanceof Number) {
-            int count = ((Number) right).intValue();
-            List<Object> list = (List<Object>) left;
-            List<Object> result = new ArrayList<>();
+        if (left instanceof ListValue l && right instanceof NumberValue n) {
+            int count = n.asInt();
+            List<Value> result = new ArrayList<>();
             for (int i = 0; i < Math.max(0, count); i++) {
-                result.addAll(list);
+                result.addAll(l.items());
             }
-            return result;
+            return new ListValue(result);
         }
         
-        // Numeric multiplication
         return evaluateNumericOp(left, right, "*");
     }
     
-    /**
-     * Evaluate a list literal expression to create a new ArrayList.
-     * 
-     * <p>Evaluates each element expression and collects them into a mutable ArrayList.
-     * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * items = []                    // Result: new ArrayList<>()
-     * numbers = [1, 2, 3]          // Result: ArrayList ["1", "2", "3"]
-     * values = [INPUT.x, INPUT.y]  // Result: ArrayList with evaluated values
-     * lengths = [len("hi"), len("bye")] // Result: ArrayList [2, 3]
-     * }</pre>
-     * 
-     * <p>Elements are evaluated left-to-right. The returned list is mutable.
-     * 
-     * @param listLiteral The ListLiteral AST node
-     * @param context Execution context for evaluating elements
-     * @return New mutable ArrayList containing evaluated elements
-     * @throws GrizzlyExecutionException if element evaluation fails
-     */
-    private List<Object> evaluateListLiteral(ListLiteral listLiteral, ExecutionContext context) {
-        List<Object> result = new ArrayList<>();
+    private ListValue evaluateListLiteral(ListLiteral listLiteral, ExecutionContext context) {
+        List<Value> result = new ArrayList<>();
         
         for (Expression element : listLiteral.elements()) {
-            Object value = evaluateExpression(element, context);
+            Value value = evaluateExpression(element, context);
             result.add(value);
         }
         
-        return result;
+        return new ListValue(result);
     }
     
-    /**
-     * Evaluate a method call expression: {@code object.method(args)}.
-     * 
-     * <p>Supports list methods and string methods.
-     * 
-     * <p><b>List Methods:</b>
-     * <ul>
-     *   <li>{@code append(value)} - Add element: {@code items.append("x")} → returns null</li>
-     *   <li>{@code extend(list)} - Add all: {@code items.extend([1,2,3])} → returns null</li>
-     * </ul>
-     * 
-     * <p><b>String Methods:</b>
-     * <ul>
-     *   <li>{@code upper()} - Uppercase: {@code "hi".upper()} → "HI"</li>
-     *   <li>{@code lower()} - Lowercase: {@code "HI".lower()} → "hi"</li>
-     *   <li>{@code strip()} - Trim: {@code " hi ".strip()} → "hi"</li>
-     * </ul>
-     * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * items.append("value")              // Modifies list, returns null
-     * result = name.upper()              // Returns new string "NAME"
-     * OUTPUT["items"].append(customer)   // Chained access + method call
-     * }</pre>
-     * 
-     * @param methodCall The MethodCall AST node
-     * @param context Execution context
-     * @return Method's return value (null for void methods)
-     * @throws GrizzlyExecutionException if method unknown or args invalid
-     */
-    @SuppressWarnings("unchecked")
-    private Object evaluateMethodCall(MethodCall methodCall, ExecutionContext context) {
-        // Check if this is a module function call (e.g., re.match())
-        if (methodCall.object() instanceof Identifier) {
-            String moduleName = ((Identifier) methodCall.object()).name();
+    private Value evaluateMethodCall(MethodCall methodCall, ExecutionContext context) {
+        if (methodCall.object() instanceof Identifier id) {
+            String moduleName = id.name();
             String methodName = methodCall.methodName();
             
             if (modules.containsKey(moduleName)) {
                 Map<String, BuiltinFunction> module = modules.get(moduleName);
                 if (module.containsKey(methodName)) {
-                    // Evaluate arguments
-                    List<Object> args = new ArrayList<>();
+                    List<Value> args = new ArrayList<>();
                     for (Expression argExpr : methodCall.arguments()) {
                         args.add(evaluateExpression(argExpr, context));
                     }
-                    // Call the module function
                     return module.get(methodName).apply(args);
                 } else {
                     throw new GrizzlyExecutionException(
@@ -1444,18 +914,16 @@ public class GrizzlyInterpreter {
             }
         }
         
-        Object obj = evaluateExpression(methodCall.object(), context);
+        Value obj = evaluateExpression(methodCall.object(), context);
         String methodName = methodCall.methodName();
         
-        if (obj == null) {
+        if (obj instanceof NullValue) {
             throw new GrizzlyExecutionException(
                 "Cannot call method '" + methodName + "' on null object"
             );
         }
         
-        if (obj instanceof List) {
-            List<Object> list = (List<Object>) obj;
-            
+        if (obj instanceof ListValue list) {
             return switch (methodName) {
                 case "append" -> {
                     if (methodCall.arguments().size() != 1) {
@@ -1463,9 +931,9 @@ public class GrizzlyInterpreter {
                             "append() takes exactly 1 argument, got " + methodCall.arguments().size()
                         );
                     }
-                    Object value = evaluateExpression(methodCall.arguments().get(0), context);
-                    list.add(value);
-                    yield null;
+                    Value value = evaluateExpression(methodCall.arguments().get(0), context);
+                    list.append(value);
+                    yield NullValue.INSTANCE;
                 }
                 
                 case "extend" -> {
@@ -1474,71 +942,41 @@ public class GrizzlyInterpreter {
                             "extend() takes exactly 1 argument, got " + methodCall.arguments().size()
                         );
                     }
-                    Object value = evaluateExpression(methodCall.arguments().get(0), context);
-                    if (!(value instanceof List)) {
+                    Value value = evaluateExpression(methodCall.arguments().get(0), context);
+                    if (!(value instanceof ListValue other)) {
                         throw new GrizzlyExecutionException("extend() argument must be a list");
                     }
-                    list.addAll((List<?>) value);
-                    yield null;
+                    list.extend(other);
+                    yield NullValue.INSTANCE;
                 }
                 
                 default -> throw new GrizzlyExecutionException("Unknown list method: " + methodName);
             };
         }
         
-        if (obj instanceof String) {
-            String str = (String) obj;
-            
+        if (obj instanceof StringValue str) {
             return switch (methodName) {
-                case "upper" -> str.toUpperCase();
-                case "lower" -> str.toLowerCase();
-                case "strip" -> str.strip();
+                case "upper" -> new StringValue(str.value().toUpperCase());
+                case "lower" -> new StringValue(str.value().toLowerCase());
+                case "strip" -> new StringValue(str.value().strip());
                 default -> throw new GrizzlyExecutionException("Unknown string method: " + methodName);
             };
         }
         
         throw new GrizzlyExecutionException(
-            "Object of type " + obj.getClass().getSimpleName() + 
-            " does not have method '" + methodName + "'"
+            "Object of type " + obj.typeName() + " does not have method '" + methodName + "'"
         );
     }
     
-    /**
-     * Evaluate a function call expression: {@code func(args)}.
-     * 
-     * <p>Handles function calls in expression contexts (assignments, arguments, etc.).
-     * 
-     * <p><b>Built-in Functions:</b>
-     * <ul>
-     *   <li>{@code len(object)} - Get size: {@code len([1,2,3])} → 3</li>
-     * </ul>
-     * 
-     * <p><b>Examples:</b>
-     * <pre>{@code
-     * count = len(INPUT.customers)         // Built-in in assignment
-     * sizes = [len(a), len(b)]            // Built-in as list element
-     * result = helper(INPUT)               // User function
-     * total = len(process(INPUT.data))    // Nested calls
-     * }</pre>
-     * 
-     * <p><b>Execution:</b> Checks built-ins first, then user-defined functions.
-     * 
-     * @param funcCall The FunctionCallExpression AST node
-     * @param context Execution context
-     * @return The function's return value
-     * @throws GrizzlyExecutionException if function not found
-     */
-    private Object evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
-        // Check if it's a builtin function
+    private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
         if (builtinFunctions.containsKey(funcCall.functionName())) {
-            List<Object> args = new ArrayList<>();
+            List<Value> args = new ArrayList<>();
             for (Expression argExpr : funcCall.args()) {
                 args.add(evaluateExpression(argExpr, context));
             }
             return builtinFunctions.get(funcCall.functionName()).apply(args);
         }
         
-        // Otherwise find user-defined function
         FunctionDef func = program.findFunction(funcCall.functionName());
         if (func == null) {
             throw new GrizzlyExecutionException(
@@ -1549,103 +987,50 @@ public class GrizzlyInterpreter {
         ExecutionContext funcContext = new ExecutionContext();
         
         for (int i = 0; i < func.params().size(); i++) {
-            Object argValue = evaluateExpression(funcCall.args().get(i), context);
+            Value argValue = evaluateExpression(funcCall.args().get(i), context);
             funcContext.set(func.params().get(i), argValue);
         }
         
         return executeFunction(func, funcContext);
     }
     
-    /**
-     * Set a value to a target expression (variable, dict key, or attribute).
-     * 
-     * <p><b>Auto-vivification magic:</b> Automatically creates missing intermediate objects!
-     * 
-     * <p><b>Simple case - Variable:</b>
-     * <pre>{@code
-     * x = 5
-     * // Sets "x" to 5 in context
-     * }</pre>
-     * 
-     * <p><b>Dict access:</b>
-     * <pre>{@code
-     * OUTPUT["name"] = "Alice"
-     * // Sets OUTPUT's "name" key to "Alice"
-     * }</pre>
-     * 
-     * <p><b>Nested dict - AUTO-VIVIFICATION:</b>
-     * <pre>{@code
-     * OUTPUT["profile"]["email"] = "test@example.com"
-     * 
-     * Problem: OUTPUT["profile"] doesn't exist yet (null)!
-     * Solution: Auto-create OUTPUT["profile"] = {} first
-     * Then: Set OUTPUT["profile"]["email"] = "test@example.com"
-     * }</pre>
-     * 
-     * <p><b>How auto-vivification works:</b>
-     * <ol>
-     *   <li>Try to get OUTPUT["profile"] → returns null</li>
-     *   <li>Detect we're accessing nested dict (DictAccess inside DictAccess)</li>
-     *   <li>Create new empty HashMap: {}</li>
-     *   <li>Set OUTPUT["profile"] = {} (recursive call)</li>
-     *   <li>Now set OUTPUT["profile"]["email"] = value</li>
-     * </ol>
-     * 
-     * @param target What to assign to (Identifier, DictAccess, or AttrAccess)
-     * @param value What value to assign
-     * @param context Execution context for variable storage
-     */
-    @SuppressWarnings("unchecked")
-    private void setTarget(Expression target, Object value, ExecutionContext context) {
+    private void setTarget(Expression target, Value value, ExecutionContext context) {
         switch (target) {
             case Identifier i -> context.set(i.name(), value);
             case DictAccess d -> {
-                Object obj = evaluateExpression(d.object(), context);
-                Object key = evaluateExpression(d.key(), context);
+                Value obj = evaluateExpression(d.object(), context);
+                Value keyVal = evaluateExpression(d.key(), context);
                 
-                // Auto-vivification: if obj is null and we're accessing through another DictAccess,
-                // create the intermediate dictionary
-                if (obj == null && d.object() instanceof DictAccess) {
-                    // Create new empty dict for the parent
-                    Map<String, Object> newDict = new HashMap<>();
+                if (obj instanceof NullValue && d.object() instanceof DictAccess) {
+                    DictValue newDict = DictValue.empty();
                     setTarget(d.object(), newDict, context);
-                    // Now set our value in the newly created dict
-                    newDict.put(key.toString(), value);
-                } else if (obj instanceof Map) {
-                    ((Map<String, Object>) obj).put(key.toString(), value);
-                } else if (obj instanceof List) {
-                    List<Object> list = (List<Object>) obj;
-                    int index = ((Number) toNumber(key)).intValue();
-                    
-                    // Handle negative indices
+                    newDict.put(asString(keyVal), value);
+                } else if (obj instanceof DictValue dict) {
+                    dict.put(asString(keyVal), value);
+                } else if (obj instanceof ListValue list) {
+                    int index = toInt(keyVal);
                     if (index < 0) {
                         index = list.size() + index;
                     }
-                    
-                    // Bounds check
                     if (index < 0 || index >= list.size()) {
                         throw new GrizzlyExecutionException(
-                            "List index out of range: " + ((Number) toNumber(key)).intValue() + 
-                            " (list size: " + list.size() + ")"
+                            "List index out of range: " + toInt(keyVal) + " (list size: " + list.size() + ")"
                         );
                     }
-                    
                     list.set(index, value);
                 } else {
                     throw new GrizzlyExecutionException(
-                        "Cannot set key on object of type " + 
-                        (obj != null ? obj.getClass().getSimpleName() : "null")
+                        "Cannot set key on object of type " + obj.typeName()
                     );
                 }
             }
             case AttrAccess a -> {
-                Object obj = evaluateExpression(a.object(), context);
-                if (obj instanceof Map) {
-                    ((Map<String, Object>) obj).put(a.attr(), value);
+                Value obj = evaluateExpression(a.object(), context);
+                if (obj instanceof DictValue dict) {
+                    dict.put(a.attr(), value);
                 } else {
                     throw new GrizzlyExecutionException(
-                        "Cannot set attribute on object of type " +
-                        (obj != null ? obj.getClass().getSimpleName() : "null")
+                        "Cannot set attribute on object of type " + obj.typeName()
                     );
                 }
             }
@@ -1655,81 +1040,64 @@ public class GrizzlyInterpreter {
         }
     }
     
-    private boolean isTrue(Object value) {
-        if (value == null) return false;
-        if (value instanceof Boolean) return (Boolean) value;
-        if (value instanceof Number) return ((Number) value).doubleValue() != 0;
-        if (value instanceof String) return !((String) value).isEmpty();
-        if (value instanceof Map) return !((Map<?, ?>) value).isEmpty(); // Regex match objects
-        if (value instanceof List) return !((List<?>) value).isEmpty();
-        return true;
-    }
-    
-    private Object evaluateNumericOp(Object left, Object right, String operator) {
-        // Handle DecimalValue arithmetic (exact precision!)
-        if (left instanceof com.grizzly.types.DecimalValue || right instanceof com.grizzly.types.DecimalValue) {
-            com.grizzly.types.DecimalValue l = (left instanceof com.grizzly.types.DecimalValue) 
-                ? (com.grizzly.types.DecimalValue) left 
-                : new com.grizzly.types.DecimalValue(String.valueOf(left));
-            com.grizzly.types.DecimalValue r = (right instanceof com.grizzly.types.DecimalValue) 
-                ? (com.grizzly.types.DecimalValue) right 
-                : new com.grizzly.types.DecimalValue(String.valueOf(right));
+    private Value evaluateNumericOp(Value left, Value right, String operator) {
+        if (left instanceof DecimalValue || right instanceof DecimalValue) {
+            DecimalValue l = (left instanceof DecimalValue ld) 
+                ? ld 
+                : new DecimalValue(asString(left));
+            DecimalValue r = (right instanceof DecimalValue rd) 
+                ? rd 
+                : new DecimalValue(asString(right));
             
             return switch (operator) {
                 case "+" -> l.add(r);
                 case "-" -> l.subtract(r);
                 case "*" -> l.multiply(r);
                 case "/" -> l.divide(r);
-                case "//" -> new com.grizzly.types.DecimalValue(
+                case "//" -> new DecimalValue(
                     l.getValue().divideToIntegralValue(r.getValue())
                 );
-                case "%" -> new com.grizzly.types.DecimalValue(
+                case "%" -> new DecimalValue(
                     l.getValue().remainder(r.getValue())
                 );
                 case "**" -> {
-                    // Power for decimals - convert to double temporarily
                     double result = Math.pow(l.toDouble(), r.toDouble());
-                    yield new com.grizzly.types.DecimalValue(String.valueOf(result));
+                    yield new DecimalValue(String.valueOf(result));
                 }
                 default -> throw new GrizzlyExecutionException("Unknown numeric operator: " + operator);
             };
         }
         
-        // Regular numeric operations
-        double l = toNumber(left);
-        double r = toNumber(right);
+        double l = toDouble(left);
+        double r = toDouble(right);
         
-        // Check if both are integers
         boolean bothIntegers = (l == Math.floor(l)) && (r == Math.floor(r));
         
         double result = switch (operator) {
             case "+" -> l + r;
             case "-" -> l - r;
             case "*" -> l * r;
-            case "/" -> l / r;  // Always returns double (Python behavior)
-            case "//" -> Math.floor(l / r);  // Floor division
-            case "%" -> l % r;  // Modulo/remainder
-            case "**" -> Math.pow(l, r);  // Power
+            case "/" -> l / r;
+            case "//" -> Math.floor(l / r);
+            case "%" -> l % r;
+            case "**" -> Math.pow(l, r);
             default -> throw new GrizzlyExecutionException("Unknown numeric operator: " + operator);
         };
         
-        // Return integer if both inputs were integers and result is whole number
-        // Exception: division always returns double
         if (bothIntegers && result == Math.floor(result) && !operator.equals("/")) {
-            return (int) result;
+            return NumberValue.of((int) result);
         }
-        return result;
+        return NumberValue.of(result);
     }
     
-    private boolean evaluateComparison(Object left, Object right, String operator) {
-        // Handle DecimalValue comparisons
-        if (left instanceof com.grizzly.types.DecimalValue || right instanceof com.grizzly.types.DecimalValue) {
-            com.grizzly.types.DecimalValue l = (left instanceof com.grizzly.types.DecimalValue) 
-                ? (com.grizzly.types.DecimalValue) left 
-                : new com.grizzly.types.DecimalValue(String.valueOf(left));
-            com.grizzly.types.DecimalValue r = (right instanceof com.grizzly.types.DecimalValue) 
-                ? (com.grizzly.types.DecimalValue) right 
-                : new com.grizzly.types.DecimalValue(String.valueOf(right));
+    private boolean evaluateComparison(Value left, Value right, String operator) {
+        if (left instanceof DecimalValue || right instanceof DecimalValue) {
+            DecimalValue l = (left instanceof DecimalValue ld) 
+                ? ld 
+                : new DecimalValue(asString(left));
+            DecimalValue r = (right instanceof DecimalValue rd) 
+                ? rd 
+                : new DecimalValue(asString(right));
             
             return switch (operator) {
                 case "<" -> l.lessThan(r);
@@ -1740,9 +1108,8 @@ public class GrizzlyInterpreter {
             };
         }
         
-        // Regular numeric comparisons
-        double l = toNumber(left);
-        double r = toNumber(right);
+        double l = toDouble(left);
+        double r = toDouble(right);
         
         return switch (operator) {
             case "<" -> l < r;
@@ -1753,23 +1120,38 @@ public class GrizzlyInterpreter {
         };
     }
     
-    private double toNumber(Object value) {
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        } else if (value instanceof String) {
-            try {
-                return Double.parseDouble((String) value);
-            } catch (NumberFormatException e) {
-                throw new GrizzlyExecutionException("Cannot convert '" + value + "' to number");
-            }
-        }
-        throw new GrizzlyExecutionException("Cannot convert " + value.getClass().getSimpleName() + " to number");
+    // ==================== Helper Methods ====================
+    
+    private String asString(Value value) {
+        return switch (value) {
+            case StringValue s -> s.value();
+            case NumberValue n -> n.toString();
+            case BoolValue b -> b.toString();
+            case NullValue ignored -> "None";
+            default -> value.toString();
+        };
     }
     
-    /**
-     * Internal class to signal loop control flow (break/continue).
-     * 
-     * <p>Used to propagate break/continue up the call stack to the enclosing loop.
-     */
+    private double toDouble(Value value) {
+        return switch (value) {
+            case NumberValue n -> n.asDouble();
+            case StringValue s -> {
+                try {
+                    yield Double.parseDouble(s.value());
+                } catch (NumberFormatException e) {
+                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to number");
+                }
+            }
+            case DecimalValue d -> d.toDouble();
+            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to number");
+        };
+    }
+    
+    private int toInt(Value value) {
+        return (int) toDouble(value);
+    }
+    
+    private long toLong(Value value) {
+        return (long) toDouble(value);
+    }
 }
-

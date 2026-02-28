@@ -43,7 +43,7 @@ import java.math.RoundingMode;
  * rounded = round(amount, 2)
  * }</pre>
  */
-public class DecimalValue {
+public final class DecimalValue implements Value {
     
     private final BigDecimal value;
     
@@ -241,7 +241,7 @@ public class DecimalValue {
      * Check if this decimal is less than another.
      * 
      * @param other Decimal to compare with
-     * @return true if this < other
+     * @return true if this is less than other
      */
     public boolean lessThan(DecimalValue other) {
         return this.value.compareTo(other.value) < 0;
@@ -261,10 +261,20 @@ public class DecimalValue {
      * Check if this decimal is less than or equal to another.
      * 
      * @param other Decimal to compare with
-     * @return true if this <= other
+     * @return true if this is less than or equal to other
      */
     public boolean lessThanOrEqual(DecimalValue other) {
         return this.value.compareTo(other.value) <= 0;
+    }
+    
+    @Override
+    public String typeName() {
+        return "decimal";
+    }
+    
+    @Override
+    public boolean isTruthy() {
+        return value.compareTo(java.math.BigDecimal.ZERO) != 0;
     }
     
     /**

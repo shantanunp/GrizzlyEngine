@@ -4,10 +4,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-
-import com.grizzly.types.DateTimeValue;
 
 /**
  * Tests for datetime functionality.
@@ -30,17 +27,18 @@ class DateTimeTest {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                OUTPUT["timestamp"] = now()
+                OUTPUT["timestamp"] = formatDate(now(), "yyyy-MM-dd")
                 return OUTPUT
             """;
         
         GrizzlyTemplate compiled = engine.compileFromString(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
-        assertThat(result.get("timestamp")).isInstanceOf(DateTimeValue.class);
+        // DateTimeValue is serialized to ISO string in JSON output
+        assertThat(result.get("timestamp")).isInstanceOf(String.class);
         
-        DateTimeValue dt = (DateTimeValue) result.get("timestamp");
-        assertThat(dt.getYear()).isEqualTo(ZonedDateTime.now().getYear());
+        String dateStr = (String) result.get("timestamp");
+        assertThat(dateStr).startsWith(String.valueOf(ZonedDateTime.now().getYear()));
     }
     
     @Test
@@ -48,15 +46,16 @@ class DateTimeTest {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                OUTPUT["utc_time"] = now("UTC")
+                OUTPUT["utc_time"] = formatDate(now("UTC"), "yyyy-MM-dd'T'HH:mm:ssZ")
                 return OUTPUT
             """;
         
         GrizzlyTemplate compiled = engine.compileFromString(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
-        DateTimeValue dt = (DateTimeValue) result.get("utc_time");
-        assertThat(dt.getValue().getZone().getId()).isEqualTo("UTC");
+        // DateTimeValue is serialized to string, check it contains UTC offset (+0000)
+        String utcTime = (String) result.get("utc_time");
+        assertThat(utcTime).endsWith("+0000");
     }
     
     @Test
@@ -64,17 +63,19 @@ class DateTimeTest {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                OUTPUT["parsed"] = parseDate("2024-02-22", "yyyy-MM-dd")
+                dt = parseDate("2024-02-22", "yyyy-MM-dd")
+                OUTPUT["year"] = formatDate(dt, "yyyy")
+                OUTPUT["month"] = formatDate(dt, "MM")
+                OUTPUT["day"] = formatDate(dt, "dd")
                 return OUTPUT
             """;
         
         GrizzlyTemplate compiled = engine.compileFromString(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
-        DateTimeValue dt = (DateTimeValue) result.get("parsed");
-        assertThat(dt.getYear()).isEqualTo(2024);
-        assertThat(dt.getMonth()).isEqualTo(2);
-        assertThat(dt.getDay()).isEqualTo(22);
+        assertThat(result.get("year")).isEqualTo("2024");
+        assertThat(result.get("month")).isEqualTo("02");
+        assertThat(result.get("day")).isEqualTo("22");
     }
     
     @Test
@@ -82,17 +83,15 @@ class DateTimeTest {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                OUTPUT["parsed"] = parseDate("22/02/2024", "dd/MM/yyyy")
+                dt = parseDate("22/02/2024", "dd/MM/yyyy")
+                OUTPUT["formatted"] = formatDate(dt, "yyyy-MM-dd")
                 return OUTPUT
             """;
         
         GrizzlyTemplate compiled = engine.compileFromString(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
-        DateTimeValue dt = (DateTimeValue) result.get("parsed");
-        assertThat(dt.getYear()).isEqualTo(2024);
-        assertThat(dt.getMonth()).isEqualTo(2);
-        assertThat(dt.getDay()).isEqualTo(22);
+        assertThat(result.get("formatted")).isEqualTo("2024-02-22");
     }
     
     @Test

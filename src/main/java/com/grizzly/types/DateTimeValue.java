@@ -36,7 +36,7 @@ import java.time.temporal.ChronoUnit;
  * formatted = formatDate(date, "yyyyMMdd")    // "20240222"
  * }</pre>
  */
-public class DateTimeValue {
+public final class DateTimeValue implements Value {
     
     private final ZonedDateTime value;
     
@@ -223,6 +223,16 @@ public class DateTimeValue {
      */
     public long daysBetween(DateTimeValue other) {
         return ChronoUnit.DAYS.between(this.value, other.value);
+    }
+    
+    @Override
+    public String typeName() {
+        return "datetime";
+    }
+    
+    @Override
+    public boolean isTruthy() {
+        return true;
     }
     
     @Override
