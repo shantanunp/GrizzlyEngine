@@ -215,6 +215,32 @@ public class GrizzlyInterpreter {
      *         doesn't return a dict, or any runtime error occurs
      */
     public Map<String, Object> execute(Map<String, Object> inputData) {
+        DictValue input = ValueConverter.fromJavaMap(inputData);
+        DictValue output = executeTyped(input);
+        return ValueConverter.toJavaMap(output);
+    }
+    
+    /**
+     * Execute the transform function with type-safe DictValue input and output.
+     * 
+     * <p>This method is used internally for format-agnostic execution.
+     * It avoids the Map-to-DictValue conversion overhead when working
+     * directly with the type-safe Value hierarchy.
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * // Used by format handlers
+     * DictValue input = xmlReader.read(xmlString);
+     * DictValue output = interpreter.executeTyped(input);
+     * String json = jsonWriter.write(output);
+     * }</pre>
+     * 
+     * @param input Input data as DictValue
+     * @return Output data as DictValue
+     * @throws GrizzlyExecutionException if transform function is not found,
+     *         doesn't return a dict, or any runtime error occurs
+     */
+    public DictValue executeTyped(DictValue input) {
         GrizzlyLogger.info("INTERPRETER", "Starting execution");
         executionStartTime = System.currentTimeMillis();
         currentRecursionDepth = 0;
@@ -230,19 +256,17 @@ public class GrizzlyInterpreter {
         }
         
         ExecutionContext context = new ExecutionContext();
-        DictValue input = ValueConverter.fromJavaMap(inputData);
         context.set("INPUT", input);
-        GrizzlyLogger.debug("INTERPRETER", "Bound INPUT with " + inputData.size() + " keys");
+        GrizzlyLogger.debug("INTERPRETER", "Bound INPUT with " + input.size() + " keys");
         
         GrizzlyLogger.debug("INTERPRETER", "Calling transform()");
         Value result = executeFunction(transformFunc, context);
         
         if (result instanceof DictValue dict) {
-            Map<String, Object> output = ValueConverter.toJavaMap(dict);
             long elapsed = System.currentTimeMillis() - executionStartTime;
             GrizzlyLogger.info("INTERPRETER", "Execution complete in " + elapsed + "ms, " +
-                "output has " + output.size() + " keys");
-            return output;
+                "output has " + dict.size() + " keys");
+            return dict;
         }
         
         throw new GrizzlyExecutionException("transform() must return a dict, got: " + 
