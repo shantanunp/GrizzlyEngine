@@ -710,6 +710,17 @@ public class GrizzlyParser {
             return new BinaryOp(new NumberLiteral(0), "-", expr);
         }
         
+        // Boolean literals: true, false
+        if (token.type() == TokenType.TRUE) {
+            advance();
+            return new BooleanLiteral(true);
+        }
+        
+        if (token.type() == TokenType.FALSE) {
+            advance();
+            return new BooleanLiteral(false);
+        }
+        
         // String literal
         if (token.type() == TokenType.STRING) {
             advance();

@@ -370,6 +370,334 @@ public class GrizzlyInterpreter {
             long minutes = (long) toNumber(args.get(1));
             return dt.addMinutes(minutes);
         });
+        
+        // ─────────────────────────────────────────────────────────────────────
+        // DECIMAL FUNCTIONS - Exact precision for money calculations
+        // ─────────────────────────────────────────────────────────────────────
+        
+        /**
+         * Decimal(value) - Create a decimal with exact precision.
+         * 
+         * <p><b>Always use strings!</b> This avoids float errors.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * amount = Decimal("1234.56")   // GOOD
+         * rate = Decimal("0.05")        // GOOD
+         * bad = Decimal(1234.56)        // BAD - still uses float!
+         * }</pre>
+         * 
+         * @param args Single argument - string or number to convert
+         * @return DecimalValue with exact precision
+         */
+        builtinFunctions.put("Decimal", (args) -> {
+            if (args.size() != 1) {
+                throw new GrizzlyExecutionException(
+                    "Decimal() requires exactly 1 argument: Decimal(\"123.45\")"
+                );
+            }
+            
+            Object value = args.get(0);
+            
+            if (value instanceof String) {
+                return new com.grizzly.types.DecimalValue((String) value);
+            } else if (value instanceof Integer) {
+                return new com.grizzly.types.DecimalValue((Integer) value);
+            } else if (value instanceof Long) {
+                return new com.grizzly.types.DecimalValue(((Long) value).intValue());
+            } else if (value instanceof Double || value instanceof Float) {
+                // Allow but warn - defeats the purpose!
+                return new com.grizzly.types.DecimalValue(String.valueOf(value));
+            } else {
+                throw new GrizzlyExecutionException(
+                    "Decimal() argument must be a string or number, got: " + value.getClass().getSimpleName()
+                );
+            }
+        });
+        
+        /**
+         * round(decimal, places) - Round decimal to specified decimal places.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * round(Decimal("1234.5678"), 2)  // 1234.57
+         * round(Decimal("1234.5678"), 0)  // 1235
+         * }</pre>
+         * 
+         * @param args [0] DecimalValue to round, [1] number of decimal places
+         * @return Rounded DecimalValue
+         */
+        builtinFunctions.put("round", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "round() requires 2 arguments: round(decimal, places)"
+                );
+            }
+            
+            if (!(args.get(0) instanceof com.grizzly.types.DecimalValue)) {
+                throw new GrizzlyExecutionException(
+                    "round() first argument must be a Decimal, got: " + 
+                    args.get(0).getClass().getSimpleName()
+                );
+            }
+            
+            com.grizzly.types.DecimalValue decimal = (com.grizzly.types.DecimalValue) args.get(0);
+            int places = ((Number) args.get(1)).intValue();
+            
+            return decimal.round(places);
+        });
+        
+        /**
+         * str(value) - Convert any value to string.
+         * 
+         * <p>Essential for converting Decimals and other objects to strings for JSON output.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * str(Decimal("1234.56"))  // "1234.56"
+         * str(123)                 // "123"
+         * str(True)                // "True"
+         * }</pre>
+         * 
+         * @param args Single argument - value to convert to string
+         * @return String representation of the value
+         */
+        builtinFunctions.put("str", (args) -> {
+            if (args.size() != 1) {
+                throw new GrizzlyExecutionException(
+                    "str() requires exactly 1 argument: str(value)"
+                );
+            }
+            
+            Object value = args.get(0);
+            
+            if (value == null) {
+                return "None";
+            } else if (value instanceof Boolean) {
+                return (Boolean) value ? "True" : "False";
+            } else {
+                return value.toString();
+            }
+        });
+        
+        // ─────────────────────────────────────────────────────────────────────
+        // REGEX FUNCTIONS - Pattern matching and text processing
+        // ─────────────────────────────────────────────────────────────────────
+        
+        /**
+         * re_match(pattern, text) - Check if text matches pattern from start.
+         * 
+         * <p>Returns a match object (as Map) if successful, null otherwise.
+         * Use in if statements: {@code if re_match(pattern, text)}
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * // Validate SSN
+         * if re_match("^\d{3}-\d{2}-\d{4}$", INPUT.ssn):
+         *     OUTPUT["validSSN"] = True
+         * 
+         * // Validate email
+         * if re_match("^[\w\.-]+@[\w\.-]+\.\w+$", INPUT.email):
+         *     OUTPUT["validEmail"] = True
+         * }</pre>
+         * 
+         * @param args [0] pattern string, [1] text to match
+         * @return Match object (Map with 'matched' boolean) or null
+         */
+        builtinFunctions.put("re_match", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "re_match() requires 2 arguments: re_match(pattern, text)"
+                );
+            }
+            
+            String pattern = String.valueOf(args.get(0));
+            String text = String.valueOf(args.get(1));
+            
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+                java.util.regex.Matcher m = p.matcher(text);
+                
+                if (m.matches()) {
+                    Map<String, Object> match = new HashMap<>();
+                    match.put("matched", true);
+                    match.put("value", text);
+                    return match;
+                }
+                return null;
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
+                );
+            }
+        });
+        
+        /**
+         * re_search(pattern, text) - Find first occurrence of pattern in text.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * // Find account number
+         * match = re_search("ACC-\d{6}", INPUT.description)
+         * if match:
+         *     OUTPUT["accountNumber"] = match["value"]
+         * }</pre>
+         * 
+         * @param args [0] pattern string, [1] text to search
+         * @return Match object with 'value' or null
+         */
+        builtinFunctions.put("re_search", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "re_search() requires 2 arguments: re_search(pattern, text)"
+                );
+            }
+            
+            String pattern = String.valueOf(args.get(0));
+            String text = String.valueOf(args.get(1));
+            
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+                java.util.regex.Matcher m = p.matcher(text);
+                
+                if (m.find()) {
+                    Map<String, Object> match = new HashMap<>();
+                    match.put("matched", true);
+                    match.put("value", m.group());
+                    match.put("start", m.start());
+                    match.put("end", m.end());
+                    return match;
+                }
+                return null;
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
+                );
+            }
+        });
+        
+        /**
+         * re_findall(pattern, text) - Find all occurrences of pattern.
+         * 
+         * <p>Returns a list of all matches.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * // Extract all emails
+         * emails = re_findall("[\w\.-]+@[\w\.-]+\.\w+", INPUT.text)
+         * OUTPUT["emails"] = emails
+         * 
+         * // Extract all phone numbers
+         * phones = re_findall("\d{3}-\d{3}-\d{4}", INPUT.contactInfo)
+         * }</pre>
+         * 
+         * @param args [0] pattern string, [1] text to search
+         * @return List of matched strings
+         */
+        builtinFunctions.put("re_findall", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "re_findall() requires 2 arguments: re_findall(pattern, text)"
+                );
+            }
+            
+            String pattern = String.valueOf(args.get(0));
+            String text = String.valueOf(args.get(1));
+            List<String> matches = new ArrayList<>();
+            
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+                java.util.regex.Matcher m = p.matcher(text);
+                
+                while (m.find()) {
+                    matches.add(m.group());
+                }
+                
+                return matches;
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
+                );
+            }
+        });
+        
+        /**
+         * re_sub(pattern, replacement, text) - Replace pattern matches with replacement.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * // Remove dashes from SSN
+         * cleanSSN = re_sub("-", "", INPUT.ssn)
+         * // "123-45-6789" → "123456789"
+         * 
+         * // Remove all non-digits
+         * digitsOnly = re_sub("\D", "", INPUT.phone)
+         * // "(555) 123-4567" → "5551234567"
+         * 
+         * // Mask SSN
+         * masked = re_sub("\d(?=\d{4})", "*", INPUT.ssn)
+         * // "123-45-6789" → "***-**-6789"
+         * }</pre>
+         * 
+         * @param args [0] pattern, [1] replacement string, [2] text
+         * @return Text with replacements made
+         */
+        builtinFunctions.put("re_sub", (args) -> {
+            if (args.size() != 3) {
+                throw new GrizzlyExecutionException(
+                    "re_sub() requires 3 arguments: re_sub(pattern, replacement, text)"
+                );
+            }
+            
+            String pattern = String.valueOf(args.get(0));
+            String replacement = String.valueOf(args.get(1));
+            String text = String.valueOf(args.get(2));
+            
+            try {
+                return text.replaceAll(pattern, replacement);
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
+                );
+            }
+        });
+        
+        /**
+         * re_split(pattern, text) - Split text by pattern.
+         * 
+         * <p>Examples:
+         * <pre>{@code
+         * // Split CSV
+         * parts = re_split(",", INPUT.csvLine)
+         * OUTPUT["firstName"] = parts[0]
+         * OUTPUT["lastName"] = parts[1]
+         * 
+         * // Split by multiple delimiters
+         * parts = re_split("[;,|]", INPUT.data)
+         * }</pre>
+         * 
+         * @param args [0] pattern, [1] text to split
+         * @return List of strings
+         */
+        builtinFunctions.put("re_split", (args) -> {
+            if (args.size() != 2) {
+                throw new GrizzlyExecutionException(
+                    "re_split() requires 2 arguments: re_split(pattern, text)"
+                );
+            }
+            
+            String pattern = String.valueOf(args.get(0));
+            String text = String.valueOf(args.get(1));
+            
+            try {
+                String[] parts = text.split(pattern);
+                return java.util.Arrays.asList(parts);
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new GrizzlyExecutionException(
+                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
+                );
+            }
+        });
     }
     
     private Object executeFunction(FunctionDef function, ExecutionContext context) {
@@ -786,6 +1114,7 @@ public class GrizzlyInterpreter {
             return switch (expr) {
                 case NumberLiteral n -> n.value();
                 case StringLiteral s -> s.value();
+                case BooleanLiteral b -> b.value();
                 case Identifier i -> context.get(i.name());
                 case DictLiteral d -> new HashMap<String, Object>();
                 case ListLiteral l -> evaluateListLiteral(l, context);
@@ -995,10 +1324,15 @@ public class GrizzlyInterpreter {
     }
     
     /**
-     * Handle + operator: concatenation for strings/lists, addition for numbers
+     * Handle + operator: concatenation for strings/lists, addition for numbers/decimals
      */
     @SuppressWarnings("unchecked")
     private Object evaluatePlus(Object left, Object right) {
+        // DecimalValue addition (exact precision!)
+        if (left instanceof com.grizzly.types.DecimalValue && right instanceof com.grizzly.types.DecimalValue) {
+            return ((com.grizzly.types.DecimalValue) left).add((com.grizzly.types.DecimalValue) right);
+        }
+        
         // String concatenation
         if (left instanceof String || right instanceof String) {
             return left.toString() + right.toString();
@@ -1333,10 +1667,42 @@ public class GrizzlyInterpreter {
         if (value instanceof Boolean) return (Boolean) value;
         if (value instanceof Number) return ((Number) value).doubleValue() != 0;
         if (value instanceof String) return !((String) value).isEmpty();
+        if (value instanceof Map) return !((Map<?, ?>) value).isEmpty(); // Regex match objects
+        if (value instanceof List) return !((List<?>) value).isEmpty();
         return true;
     }
     
     private Object evaluateNumericOp(Object left, Object right, String operator) {
+        // Handle DecimalValue arithmetic (exact precision!)
+        if (left instanceof com.grizzly.types.DecimalValue || right instanceof com.grizzly.types.DecimalValue) {
+            com.grizzly.types.DecimalValue l = (left instanceof com.grizzly.types.DecimalValue) 
+                ? (com.grizzly.types.DecimalValue) left 
+                : new com.grizzly.types.DecimalValue(String.valueOf(left));
+            com.grizzly.types.DecimalValue r = (right instanceof com.grizzly.types.DecimalValue) 
+                ? (com.grizzly.types.DecimalValue) right 
+                : new com.grizzly.types.DecimalValue(String.valueOf(right));
+            
+            return switch (operator) {
+                case "+" -> l.add(r);
+                case "-" -> l.subtract(r);
+                case "*" -> l.multiply(r);
+                case "/" -> l.divide(r);
+                case "//" -> new com.grizzly.types.DecimalValue(
+                    l.getValue().divideToIntegralValue(r.getValue())
+                );
+                case "%" -> new com.grizzly.types.DecimalValue(
+                    l.getValue().remainder(r.getValue())
+                );
+                case "**" -> {
+                    // Power for decimals - convert to double temporarily
+                    double result = Math.pow(l.toDouble(), r.toDouble());
+                    yield new com.grizzly.types.DecimalValue(String.valueOf(result));
+                }
+                default -> throw new GrizzlyExecutionException("Unknown numeric operator: " + operator);
+            };
+        }
+        
+        // Regular numeric operations
         double l = toNumber(left);
         double r = toNumber(right);
         
@@ -1363,6 +1729,25 @@ public class GrizzlyInterpreter {
     }
     
     private boolean evaluateComparison(Object left, Object right, String operator) {
+        // Handle DecimalValue comparisons
+        if (left instanceof com.grizzly.types.DecimalValue || right instanceof com.grizzly.types.DecimalValue) {
+            com.grizzly.types.DecimalValue l = (left instanceof com.grizzly.types.DecimalValue) 
+                ? (com.grizzly.types.DecimalValue) left 
+                : new com.grizzly.types.DecimalValue(String.valueOf(left));
+            com.grizzly.types.DecimalValue r = (right instanceof com.grizzly.types.DecimalValue) 
+                ? (com.grizzly.types.DecimalValue) right 
+                : new com.grizzly.types.DecimalValue(String.valueOf(right));
+            
+            return switch (operator) {
+                case "<" -> l.lessThan(r);
+                case ">" -> l.greaterThan(r);
+                case "<=" -> l.lessThanOrEqual(r);
+                case ">=" -> l.greaterThanOrEqual(r);
+                default -> throw new GrizzlyExecutionException("Unknown comparison operator: " + operator);
+            };
+        }
+        
+        // Regular numeric comparisons
         double l = toNumber(left);
         double r = toNumber(right);
         

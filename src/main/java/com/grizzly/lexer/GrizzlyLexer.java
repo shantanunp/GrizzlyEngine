@@ -19,16 +19,18 @@ import java.util.Map;
 public class GrizzlyLexer {
     
     // Python keywords we recognize
-    private static final Map<String, TokenType> KEYWORDS = Map.of(
-        "def", TokenType.DEF,
-        "if", TokenType.IF,
-        "elif", TokenType.ELIF,
-        "else", TokenType.ELSE,
-        "return", TokenType.RETURN,
-        "for", TokenType.FOR,
-        "in", TokenType.IN,
-        "break", TokenType.BREAK,
-        "continue", TokenType.CONTINUE
+    private static final Map<String, TokenType> KEYWORDS = Map.ofEntries(
+        Map.entry("def", TokenType.DEF),
+        Map.entry("if", TokenType.IF),
+        Map.entry("elif", TokenType.ELIF),
+        Map.entry("else", TokenType.ELSE),
+        Map.entry("return", TokenType.RETURN),
+        Map.entry("for", TokenType.FOR),
+        Map.entry("in", TokenType.IN),
+        Map.entry("break", TokenType.BREAK),
+        Map.entry("continue", TokenType.CONTINUE),
+        Map.entry("true", TokenType.TRUE),
+        Map.entry("false", TokenType.FALSE)
     );
     
     // Constants
@@ -483,6 +485,43 @@ public class GrizzlyLexer {
     }
     
     /**
+     * Tokenize raw string literal (r"..." or r'...') - NO escape sequence processing!
+     * 
+     * <p>Raw strings are perfect for regex patterns where backslashes are common.
+     * 
+     * <p><b>Examples:</b>
+     * <pre>{@code
+     * r"\d{3}"         → "\d{3}" (backslash preserved)
+     * r"[a-z]+"        → "[a-z]+"
+     * r"\w+@\w+\.\w+"  → "\w+@\w+\.\w+" (all backslashes preserved)
+     * 
+     * // Compare with regular strings:
+     * "\\d{3}"         → "\d{3}" (need double backslash)
+     * r"\d{3}"         → "\d{3}" (single backslash works!)
+     * }</pre>
+     */
+    private void tokenizeRawString(char quote) {
+        int startColumn = column;
+        advance(); // Skip opening quote
+        
+        StringBuilder content = new StringBuilder();
+        
+        while (!isAtEnd() && currentChar() != quote) {
+            // Raw strings: NO escape sequence processing!
+            // Everything between quotes is taken literally
+            content.append(currentChar());
+            advance();
+        }
+        
+        if (isAtEnd()) {
+            throw error("Unterminated raw string", startColumn);
+        }
+        
+        advance(); // Skip closing quote
+        addToken(TokenType.STRING, content.toString(), startColumn);
+    }
+    
+    /**
      * Handle escape sequences in strings (\n, \t, \\, etc.)
      */
     private char handleEscapeSequence() {
@@ -520,6 +559,7 @@ public class GrizzlyLexer {
     
     /**
      * Tokenize identifier or keyword (transform, OUTPUT, def, if, etc.)
+     * Also handles raw strings (r"..." for regex patterns)
      */
     private void tokenizeIdentifier() {
         int startColumn = column;
@@ -531,6 +571,13 @@ public class GrizzlyLexer {
         }
         
         String text = identifier.toString();
+        
+        // Check for raw string prefix: r"..." or r'...'
+        if (text.equals("r") && !isAtEnd() && isQuote(currentChar())) {
+            tokenizeRawString(currentChar());
+            return;
+        }
+        
         TokenType type = KEYWORDS.getOrDefault(text, TokenType.IDENTIFIER);
         addToken(type, text, startColumn);
     }

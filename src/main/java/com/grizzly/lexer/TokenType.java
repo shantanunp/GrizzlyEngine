@@ -14,6 +14,8 @@ public enum TokenType {
     IN,         // in
     BREAK,      // break
     CONTINUE,   // continue
+    TRUE,       // true
+    FALSE,      // false
     
     // Literals
     IDENTIFIER, // variable names, function names
