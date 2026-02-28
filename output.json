@@ -1,0 +1,23 @@
+{
+  "settings" : {
+    "notifications" : "email"
+  },
+  "address" : {
+    "zip" : "94102",
+    "city" : "San Francisco",
+    "street" : "123 Main St",
+    "state" : "CA"
+  },
+  "contact" : {
+    "phone" : "+1-555-1234",
+    "email" : "john.doe@example.com"
+  },
+  "fullName" : "John",
+  "id" : "C12345",
+  "account" : {
+    "balance" : 15000.5,
+    "tier" : "GOLD",
+    "type" : "PREMIUM",
+    "status" : "adult"
+  }
+}

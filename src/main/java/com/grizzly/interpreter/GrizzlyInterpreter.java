@@ -1,6 +1,7 @@
 package com.grizzly.interpreter;
 
 import com.grizzly.exception.GrizzlyExecutionException;
+import com.grizzly.logging.GrizzlyLogger;
 import com.grizzly.parser.ast.*;
 import com.grizzly.types.*;
 
@@ -11,10 +12,156 @@ import java.util.Map;
 import static com.grizzly.interpreter.ValueUtils.*;
 
 /**
- * Grizzly Interpreter - Executes the AST (Abstract Syntax Tree).
+ * <h1>Interpreter - Step 3 of the Compilation Pipeline</h1>
  * 
- * <p>Uses type-safe Value hierarchy instead of raw Object types.
- * Includes production safeguards for loop limits, recursion depth, and timeouts.
+ * <p>The Interpreter takes the AST (Abstract Syntax Tree) produced by the Parser
+ * and <b>executes</b> it. It walks through each node in the tree and performs
+ * the corresponding action.
+ * 
+ * <h2>What is Interpretation?</h2>
+ * 
+ * <p>Interpretation is the process of executing code by walking the AST:
+ * 
+ * <pre>{@code
+ * For each node in the AST:
+ *   - If it's an Assignment: evaluate the value, store in variable
+ *   - If it's a BinaryOp: evaluate left, evaluate right, apply operator
+ *   - If it's an IfStatement: evaluate condition, execute correct branch
+ *   - If it's a ReturnStatement: evaluate value, return it
+ *   - etc.
+ * }</pre>
+ * 
+ * <h2>The Compilation Pipeline</h2>
+ * 
+ * <pre>{@code
+ * ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+ * │   Source    │     │   Tokens    │     │    AST      │     │   Result    │
+ * │   Code      │────▶│   (List)    │────▶│   (Tree)    │────▶│   (Map)     │
+ * │             │     │             │     │             │     │             │
+ * └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+ *        │                  │                   │                   │
+ *     LEXER              PARSER            INTERPRETER          OUTPUT
+ *                                         (this class)
+ * }</pre>
+ * 
+ * <h2>How Execution Works</h2>
+ * 
+ * <p>The interpreter maintains an {@link ExecutionContext} that stores variables:
+ * 
+ * <pre>{@code
+ * Code:                           Context (variables):
+ * ────────────────────────────    ────────────────────
+ * def transform(INPUT):           INPUT = {"name": "John"}
+ *     OUTPUT = {}                 OUTPUT = {}
+ *     OUTPUT["greeting"] = ...    OUTPUT = {"greeting": "Hello, John!"}
+ *     return OUTPUT               (returns OUTPUT value)
+ * }</pre>
+ * 
+ * <h2>Step-by-Step Execution Example</h2>
+ * 
+ * <pre>{@code
+ * AST:
+ *   FunctionDef("transform")
+ *     ├── Assignment(OUTPUT = {})
+ *     ├── Assignment(OUTPUT["name"] = INPUT.firstName)
+ *     └── ReturnStatement(OUTPUT)
+ * 
+ * Execution trace:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │ 1. ENTER FunctionDef "transform"                                  │
+ * │    Context: {INPUT: {"firstName": "John", "lastName": "Doe"}}     │
+ * │                                                                   │
+ * │ 2. EXECUTE Assignment: OUTPUT = {}                                │
+ * │    - Evaluate right side: {} → DictValue{}                        │
+ * │    - Store in context: OUTPUT = DictValue{}                       │
+ * │    Context: {INPUT: {...}, OUTPUT: {}}                            │
+ * │                                                                   │
+ * │ 3. EXECUTE Assignment: OUTPUT["name"] = INPUT.firstName           │
+ * │    - Evaluate target: OUTPUT["name"] → DictAccess                 │
+ * │    - Evaluate value: INPUT.firstName → "John"                     │
+ * │    - Store: OUTPUT["name"] = "John"                               │
+ * │    Context: {INPUT: {...}, OUTPUT: {"name": "John"}}              │
+ * │                                                                   │
+ * │ 4. EXECUTE ReturnStatement: return OUTPUT                         │
+ * │    - Evaluate: OUTPUT → {"name": "John"}                          │
+ * │    - Return this value                                            │
+ * │                                                                   │
+ * │ 5. EXIT FunctionDef, returning: {"name": "John"}                  │
+ * └────────────────────────────────────────────────────────────────────┘
+ * }</pre>
+ * 
+ * <h2>Type-Safe Values</h2>
+ * 
+ * <p>The interpreter uses a type-safe {@link Value} hierarchy instead of raw Objects:
+ * 
+ * <table border="1">
+ *   <tr><th>Python Type</th><th>Java Value Class</th><th>Example</th></tr>
+ *   <tr><td>str</td><td>{@link StringValue}</td><td>"hello"</td></tr>
+ *   <tr><td>int/float</td><td>{@link NumberValue}</td><td>42, 3.14</td></tr>
+ *   <tr><td>bool</td><td>{@link BoolValue}</td><td>True, False</td></tr>
+ *   <tr><td>list</td><td>{@link ListValue}</td><td>[1, 2, 3]</td></tr>
+ *   <tr><td>dict</td><td>{@link DictValue}</td><td>{"key": "value"}</td></tr>
+ *   <tr><td>None</td><td>{@link NullValue}</td><td>None</td></tr>
+ * </table>
+ * 
+ * <h2>Production Safeguards</h2>
+ * 
+ * <p>The interpreter includes safeguards to prevent runaway code:
+ * 
+ * <ul>
+ *   <li><b>Loop Limit</b>: Maximum iterations per loop (default: 10,000)</li>
+ *   <li><b>Recursion Depth</b>: Maximum function call depth (default: 100)</li>
+ *   <li><b>Execution Timeout</b>: Maximum execution time (default: 30 seconds)</li>
+ * </ul>
+ * 
+ * <pre>{@code
+ * // Configure safeguards
+ * InterpreterConfig config = InterpreterConfig.builder()
+ *     .maxLoopIterations(5000)
+ *     .maxRecursionDepth(50)
+ *     .executionTimeout(Duration.ofSeconds(10))
+ *     .build();
+ * 
+ * GrizzlyInterpreter interpreter = new GrizzlyInterpreter(program, config);
+ * }</pre>
+ * 
+ * <h2>Usage Example</h2>
+ * 
+ * <pre>{@code
+ * // After lexing and parsing...
+ * Program program = parser.parse();
+ * 
+ * // Create interpreter
+ * GrizzlyInterpreter interpreter = new GrizzlyInterpreter(program);
+ * 
+ * // Execute with input data
+ * Map<String, Object> input = Map.of("firstName", "John", "lastName", "Doe");
+ * Map<String, Object> result = interpreter.execute(input);
+ * 
+ * System.out.println(result); // {"name": "John Doe"}
+ * }</pre>
+ * 
+ * <h2>Debugging</h2>
+ * 
+ * <p>Enable logging to see the execution trace:
+ * 
+ * <pre>{@code
+ * GrizzlyLogger.setLevel(GrizzlyLogger.LogLevel.TRACE);
+ * Map<String, Object> result = interpreter.execute(input);
+ * 
+ * // Output:
+ * // [TRACE] [INTERPRETER] ENTER FunctionDef: transform
+ * // [TRACE] [INTERPRETER] SET OUTPUT = dict{0 keys}
+ * // [TRACE] [INTERPRETER] GET INPUT → dict{2 keys}
+ * // [TRACE] [INTERPRETER] GET INPUT.firstName → "John"
+ * // [TRACE] [INTERPRETER] SET OUTPUT["name"] = "John"
+ * // [TRACE] [INTERPRETER] RETURN from transform → dict{1 keys}
+ * }</pre>
+ * 
+ * @see GrizzlyParser The previous step: converts tokens to AST
+ * @see ExecutionContext Stores variables during execution
+ * @see Value The type-safe value hierarchy
+ * @see InterpreterConfig Configuration for safeguards
  */
 public class GrizzlyInterpreter {
     
@@ -48,10 +195,27 @@ public class GrizzlyInterpreter {
     /**
      * Execute the transform function with input data.
      * 
-     * @param inputData Input data as Java Map (from JSON)
+     * <p>This is the main entry point for executing a compiled template.
+     * It finds the 'transform' function, binds the input data to INPUT,
+     * executes the function body, and returns the result.
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * GrizzlyInterpreter interpreter = new GrizzlyInterpreter(program);
+     * 
+     * Map<String, Object> input = Map.of("name", "John");
+     * Map<String, Object> output = interpreter.execute(input);
+     * 
+     * System.out.println(output.get("greeting")); // "Hello, John!"
+     * }</pre>
+     * 
+     * @param inputData Input data as Java Map (typically from JSON)
      * @return Output data as Java Map (for JSON serialization)
+     * @throws GrizzlyExecutionException if transform function is not found,
+     *         doesn't return a dict, or any runtime error occurs
      */
     public Map<String, Object> execute(Map<String, Object> inputData) {
+        GrizzlyLogger.info("INTERPRETER", "Starting execution");
         executionStartTime = System.currentTimeMillis();
         currentRecursionDepth = 0;
         
@@ -68,11 +232,17 @@ public class GrizzlyInterpreter {
         ExecutionContext context = new ExecutionContext();
         DictValue input = ValueConverter.fromJavaMap(inputData);
         context.set("INPUT", input);
+        GrizzlyLogger.debug("INTERPRETER", "Bound INPUT with " + inputData.size() + " keys");
         
+        GrizzlyLogger.debug("INTERPRETER", "Calling transform()");
         Value result = executeFunction(transformFunc, context);
         
         if (result instanceof DictValue dict) {
-            return ValueConverter.toJavaMap(dict);
+            Map<String, Object> output = ValueConverter.toJavaMap(dict);
+            long elapsed = System.currentTimeMillis() - executionStartTime;
+            GrizzlyLogger.info("INTERPRETER", "Execution complete in " + elapsed + "ms, " +
+                "output has " + output.size() + " keys");
+            return output;
         }
         
         throw new GrizzlyExecutionException("transform() must return a dict, got: " + 

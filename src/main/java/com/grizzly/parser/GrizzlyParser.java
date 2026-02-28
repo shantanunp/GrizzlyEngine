@@ -3,18 +3,185 @@ package com.grizzly.parser;
 import com.grizzly.exception.GrizzlyParseException;
 import com.grizzly.lexer.Token;
 import com.grizzly.lexer.TokenType;
+import com.grizzly.logging.GrizzlyLogger;
 import com.grizzly.parser.ast.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parses tokens into an Abstract Syntax Tree (AST)
+ * <h1>Parser - Step 2 of the Compilation Pipeline</h1>
  * 
- * Simple example:
+ * <p>The Parser takes the flat list of tokens from the Lexer and builds a hierarchical
+ * tree structure called an <b>Abstract Syntax Tree (AST)</b>. This tree represents
+ * the grammatical structure of your code.
  * 
- * Input tokens: [DEF, IDENTIFIER("transform"), LPAREN, IDENTIFIER("INPUT"), RPAREN, COLON, ...]
- * Output AST:   Program([FunctionDef("transform", ["INPUT"], [...])])
+ * <h2>What is Parsing?</h2>
+ * 
+ * <p>Parsing is like understanding the grammar of a sentence. The lexer gives us "words"
+ * (tokens), and the parser figures out how they relate to form "sentences" (statements).
+ * 
+ * <pre>{@code
+ * English:
+ *   Sentence: "The quick brown fox jumps over the lazy dog"
+ *   Grammar:  [Subject] [Verb] [Object]
+ *   Tree:     Sentence
+ *               ├── Subject: "The quick brown fox"
+ *               ├── Verb: "jumps over"
+ *               └── Object: "the lazy dog"
+ * 
+ * Code:
+ *   Statement: "OUTPUT["name"] = INPUT.firstName"
+ *   Grammar:   [Target] [Operator] [Value]
+ *   Tree:      Assignment
+ *                ├── target: DictAccess(OUTPUT, "name")
+ *                ├── operator: =
+ *                └── value: AttrAccess(INPUT, "firstName")
+ * }</pre>
+ * 
+ * <h2>The Compilation Pipeline</h2>
+ * 
+ * <pre>{@code
+ * ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+ * │   Source    │     │   Tokens    │     │    AST      │     │   Result    │
+ * │   Code      │────▶│   (List)    │────▶│   (Tree)    │────▶│   (Map)     │
+ * │             │     │             │     │             │     │             │
+ * └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+ *        │                  │                   │                   │
+ *     LEXER              PARSER            INTERPRETER          OUTPUT
+ *                     (this class)
+ * }</pre>
+ * 
+ * <h2>What is an AST (Abstract Syntax Tree)?</h2>
+ * 
+ * <p>An AST is a tree where each node represents a part of your code. It's "abstract"
+ * because it ignores unimportant details (like whitespace) and focuses on the meaning.
+ * 
+ * <pre>{@code
+ * Code:
+ * def transform(INPUT):
+ *     OUTPUT = {}
+ *     OUTPUT["name"] = INPUT.firstName
+ *     return OUTPUT
+ * 
+ * AST:
+ * Program
+ *   └── FunctionDef
+ *         ├── name: "transform"
+ *         ├── parameters: ["INPUT"]
+ *         └── body:
+ *               ├── Assignment
+ *               │     ├── target: Identifier("OUTPUT")
+ *               │     └── value: DictLiteral({})
+ *               │
+ *               ├── Assignment
+ *               │     ├── target: DictAccess
+ *               │     │             ├── object: Identifier("OUTPUT")
+ *               │     │             └── key: StringLiteral("name")
+ *               │     └── value: AttrAccess
+ *               │                   ├── object: Identifier("INPUT")
+ *               │                   └── attribute: "firstName"
+ *               │
+ *               └── ReturnStatement
+ *                     └── value: Identifier("OUTPUT")
+ * }</pre>
+ * 
+ * <h2>AST Node Types</h2>
+ * 
+ * <h3>Statements (things that DO something):</h3>
+ * <ul>
+ *   <li>{@link FunctionDef} - Function definition: {@code def name(params):}</li>
+ *   <li>{@link Assignment} - Variable assignment: {@code x = value}</li>
+ *   <li>{@link IfStatement} - Conditional: {@code if condition:}</li>
+ *   <li>{@link ForLoop} - Loop: {@code for item in items:}</li>
+ *   <li>{@link ReturnStatement} - Return value: {@code return value}</li>
+ * </ul>
+ * 
+ * <h3>Expressions (things that PRODUCE a value):</h3>
+ * <ul>
+ *   <li>{@link Identifier} - Variable name: {@code x, INPUT, OUTPUT}</li>
+ *   <li>{@link StringLiteral} - String: {@code "hello"}</li>
+ *   <li>{@link NumberLiteral} - Number: {@code 42, 3.14}</li>
+ *   <li>{@link BinaryOp} - Operations: {@code a + b, x == y}</li>
+ *   <li>{@link AttrAccess} - Dot access: {@code INPUT.name}</li>
+ *   <li>{@link DictAccess} - Bracket access: {@code OUTPUT["key"]}</li>
+ *   <li>{@link MethodCall} - Method call: {@code list.append(item)}</li>
+ * </ul>
+ * 
+ * <h2>Operator Precedence</h2>
+ * 
+ * <p>The parser respects operator precedence (like PEMDAS in math):
+ * 
+ * <pre>{@code
+ * Precedence (lowest to highest):
+ * 1. or              (logical OR)
+ * 2. and             (logical AND)
+ * 3. not             (logical NOT)
+ * 4. ==, !=, <, >    (comparisons)
+ * 5. +, -            (addition/subtraction)
+ * 6. *, /, //, %     (multiplication/division)
+ * 7. **              (exponentiation)
+ * 
+ * Example: 2 + 3 * 4 → BinaryOp(2, "+", BinaryOp(3, "*", 4))
+ * Because * has higher precedence than +
+ * }</pre>
+ * 
+ * <h2>Usage Example</h2>
+ * 
+ * <pre>{@code
+ * // First, tokenize the source
+ * GrizzlyLexer lexer = new GrizzlyLexer(sourceCode);
+ * List<Token> tokens = lexer.tokenize();
+ * 
+ * // Then parse tokens into AST
+ * GrizzlyParser parser = new GrizzlyParser(tokens);
+ * Program program = parser.parse();
+ * 
+ * // The program contains functions
+ * FunctionDef transform = program.findFunction("transform");
+ * System.out.println("Parameters: " + transform.parameters());
+ * }</pre>
+ * 
+ * <h2>Debugging</h2>
+ * 
+ * <p>Enable logging to see the parsing process:
+ * 
+ * <pre>{@code
+ * GrizzlyLogger.setLevel(GrizzlyLogger.LogLevel.DEBUG);
+ * Program program = parser.parse();
+ * 
+ * // Output shows AST tree structure:
+ * // [DEBUG] [PARSER     ] === AST ===
+ * // [DEBUG] [PARSER     ] Program
+ * // [DEBUG] [PARSER     ]   └── FunctionDef: transform(INPUT)
+ * // [DEBUG] [PARSER     ]         ├── Assignment: OUTPUT = DictLiteral{}
+ * // ...
+ * }</pre>
+ * 
+ * <h2>Grammar Rules (Simplified)</h2>
+ * 
+ * <p>The parser implements these grammar rules:
+ * 
+ * <pre>{@code
+ * program     → function*
+ * function    → "def" IDENTIFIER "(" params ")" ":" block
+ * block       → INDENT statement+ DEDENT
+ * statement   → assignment | return | if | for | expression
+ * assignment  → expression "=" expression
+ * expression  → or_expr
+ * or_expr     → and_expr ("or" and_expr)*
+ * and_expr    → not_expr ("and" not_expr)*
+ * not_expr    → "not" not_expr | comparison
+ * comparison  → addition (("==" | "!=" | "<" | ">") addition)*
+ * addition    → multiplication (("+" | "-") multiplication)*
+ * multiplication → power (("*" | "/" | "%") power)*
+ * power       → primary ("**" power)?
+ * primary     → literal | identifier | "(" expression ")" | access
+ * }</pre>
+ * 
+ * @see GrizzlyLexer The previous step: converts source to tokens
+ * @see com.grizzly.interpreter.GrizzlyInterpreter The next step: executes the AST
+ * @see Program The root AST node containing all functions
  */
 public class GrizzlyParser {
     
@@ -26,9 +193,31 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse all tokens into a Program
+     * Parse all tokens into a Program (the root AST node).
+     * 
+     * <p>This method reads through all tokens and constructs the complete
+     * Abstract Syntax Tree. It expects to find:
+     * <ul>
+     *   <li>Zero or more import statements</li>
+     *   <li>One or more function definitions (at least 'transform')</li>
+     * </ul>
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * // Parse tokens into AST
+     * GrizzlyParser parser = new GrizzlyParser(tokens);
+     * Program program = parser.parse();
+     * 
+     * // Access the transform function
+     * FunctionDef transform = program.findFunction("transform");
+     * }</pre>
+     * 
+     * @return Program containing all parsed functions and imports
+     * @throws GrizzlyParseException if no functions are found or syntax is invalid
      */
     public Program parse() {
+        GrizzlyLogger.info("PARSER", "Starting parsing (" + tokens.size() + " tokens)");
+        
         List<ImportStatement> imports = new ArrayList<>();
         List<FunctionDef> functions = new ArrayList<>();
         
@@ -38,10 +227,16 @@ public class GrizzlyParser {
         // Parse all top-level statements (imports and functions)
         while (!isAtEnd()) {
             if (peek().type() == TokenType.IMPORT) {
-                imports.add(parseImportStatement());
+                ImportStatement imp = parseImportStatement();
+                imports.add(imp);
+                GrizzlyLogger.debug("PARSER", "Parsed import: " + imp.moduleName());
                 skipNewlines();
             } else if (peek().type() == TokenType.DEF) {
-                functions.add(parseFunction());
+                FunctionDef func = parseFunction();
+                functions.add(func);
+                GrizzlyLogger.debug("PARSER", "Parsed function: " + func.name() + 
+                    "(" + String.join(", ", func.params()) + ") with " + 
+                    func.body().size() + " statements");
                 skipNewlines(); // Skip blank lines between functions
             } else if (peek().type() == TokenType.NEWLINE || peek().type() == TokenType.COMMENT) {
                 advance();
@@ -56,7 +251,12 @@ public class GrizzlyParser {
             throw new GrizzlyParseException("No functions found in template");
         }
         
-        return new Program(imports, functions);
+        Program program = new Program(imports, functions);
+        
+        GrizzlyLogger.info("PARSER", "Parsing complete (" + functions.size() + " functions)");
+        GrizzlyLogger.logAST(program);
+        
+        return program;
     }
     
     /**

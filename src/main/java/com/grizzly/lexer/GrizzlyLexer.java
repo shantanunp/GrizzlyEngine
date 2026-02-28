@@ -1,20 +1,134 @@
 package com.grizzly.lexer;
 
 import com.grizzly.exception.GrizzlyParseException;
+import com.grizzly.logging.GrizzlyLogger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Lexer (Tokenizer) - Converts Python template text into tokens
+ * <h1>Lexer (Tokenizer) - Step 1 of the Compilation Pipeline</h1>
  * 
- * Example:
- * Input:  "def transform(INPUT):"
- * Output: [DEF, IDENTIFIER("transform"), LPAREN, IDENTIFIER("INPUT"), RPAREN, COLON]
+ * <p>The Lexer is the first step in transforming your Python-like template code into
+ * executable instructions. It reads characters one-by-one and groups them into meaningful
+ * units called <b>tokens</b>.
  * 
- * This is Step 1 of the compilation process:
- * Text → [Lexer] → Tokens → [Parser] → AST → [Interpreter] → Result
+ * <h2>What is Tokenization?</h2>
+ * 
+ * <p>Think of the lexer as a "word splitter" that also identifies what type each word is.
+ * Just like you can split a sentence into words, the lexer splits code into tokens.
+ * 
+ * <pre>{@code
+ * English sentence: "The cat sat on the mat"
+ * Words:            ["The", "cat", "sat", "on", "the", "mat"]
+ * 
+ * Code statement:   "def transform(INPUT):"
+ * Tokens:           [DEF, IDENTIFIER("transform"), LPAREN, IDENTIFIER("INPUT"), RPAREN, COLON]
+ * }</pre>
+ * 
+ * <h2>The Compilation Pipeline</h2>
+ * 
+ * <pre>{@code
+ * ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+ * │   Source    │     │   Tokens    │     │    AST      │     │   Result    │
+ * │   Code      │────▶│   (List)    │────▶│   (Tree)    │────▶│   (Map)     │
+ * │             │     │             │     │             │     │             │
+ * └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+ *        │                  │                   │                   │
+ *        │                  │                   │                   │
+ *     LEXER              PARSER           INTERPRETER          OUTPUT
+ *   (this class)      (GrizzlyParser)  (GrizzlyInterpreter)
+ *        │                  │                   │                   │
+ *    Characters          Tokens              Execute              JSON
+ *    to Tokens          to Tree               Tree               Data
+ * }</pre>
+ * 
+ * <h2>Simple Example</h2>
+ * 
+ * <pre>{@code
+ * Input Code:
+ * ┌──────────────────────────┐
+ * │ OUTPUT["name"] = "John"  │
+ * └──────────────────────────┘
+ * 
+ * Lexer reads character by character:
+ *   'O' 'U' 'T' 'P' 'U' 'T'  → IDENTIFIER("OUTPUT")
+ *   '['                      → LBRACKET
+ *   '"' 'n' 'a' 'm' 'e' '"'  → STRING("name")
+ *   ']'                      → RBRACKET
+ *   ' '                      → (skip whitespace)
+ *   '='                      → ASSIGN
+ *   ' '                      → (skip whitespace)
+ *   '"' 'J' 'o' 'h' 'n' '"'  → STRING("John")
+ * 
+ * Output Tokens:
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ [IDENTIFIER("OUTPUT"), LBRACKET, STRING("name"), RBRACKET,         │
+ * │  ASSIGN, STRING("John")]                                           │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * }</pre>
+ * 
+ * <h2>Token Types</h2>
+ * 
+ * <table border="1">
+ *   <tr><th>Category</th><th>Examples</th><th>Token Type</th></tr>
+ *   <tr><td>Keywords</td><td>def, if, for, return</td><td>DEF, IF, FOR, RETURN</td></tr>
+ *   <tr><td>Identifiers</td><td>transform, OUTPUT, x</td><td>IDENTIFIER</td></tr>
+ *   <tr><td>Literals</td><td>"hello", 42, True</td><td>STRING, NUMBER, TRUE</td></tr>
+ *   <tr><td>Operators</td><td>+, -, ==, !=</td><td>PLUS, MINUS, EQ, NE</td></tr>
+ *   <tr><td>Delimiters</td><td>( ) [ ] { } , :</td><td>LPAREN, RPAREN, etc.</td></tr>
+ *   <tr><td>Structure</td><td>(indentation)</td><td>INDENT, DEDENT, NEWLINE</td></tr>
+ * </table>
+ * 
+ * <h2>Usage Example</h2>
+ * 
+ * <pre>{@code
+ * // Create lexer with source code
+ * GrizzlyLexer lexer = new GrizzlyLexer("def transform(INPUT):\n    return INPUT");
+ * 
+ * // Tokenize the source
+ * List<Token> tokens = lexer.tokenize();
+ * 
+ * // Examine tokens
+ * for (Token token : tokens) {
+ *     System.out.println(token.type() + " = " + token.value());
+ * }
+ * }</pre>
+ * 
+ * <h2>How Indentation Works</h2>
+ * 
+ * <p>Python uses indentation to define code blocks (unlike Java's braces).
+ * The lexer converts indentation into special tokens:
+ * 
+ * <pre>{@code
+ * def transform(INPUT):    # Line 1: No indent, currentIndent = 0
+ *     OUTPUT = {}          # Line 2: 4 spaces → emit INDENT, currentIndent = 1
+ *     if INPUT.x:          # Line 3: 4 spaces → same level, no token
+ *         OUTPUT["a"] = 1  # Line 4: 8 spaces → emit INDENT, currentIndent = 2
+ *     return OUTPUT        # Line 5: 4 spaces → emit DEDENT, currentIndent = 1
+ * 
+ * Generated tokens include: INDENT (line 2), INDENT (line 4), DEDENT (line 5)
+ * }</pre>
+ * 
+ * <h2>Debugging</h2>
+ * 
+ * <p>Enable logging to see the tokenization process:
+ * 
+ * <pre>{@code
+ * GrizzlyLogger.setLevel(GrizzlyLogger.LogLevel.DEBUG);
+ * List<Token> tokens = lexer.tokenize();
+ * 
+ * // Output:
+ * // [DEBUG] [LEXER      ] Starting tokenization (123 chars)
+ * // [DEBUG] [LEXER      ] Token: DEF at 1:1
+ * // [DEBUG] [LEXER      ] Token: IDENTIFIER("transform") at 1:5
+ * // ...
+ * }</pre>
+ * 
+ * @see Token The token class containing type, value, and position
+ * @see TokenType Enum of all possible token types
+ * @see GrizzlyParser The next step: converts tokens to AST
  */
 public class GrizzlyLexer {
     
@@ -213,14 +327,40 @@ public class GrizzlyLexer {
     }
     
     /**
-     * Main entry point - tokenize the entire source
+     * Main entry point - tokenize the entire source code into a list of tokens.
+     * 
+     * <p>This method scans the source code character by character, grouping
+     * characters into tokens. It handles:
+     * <ul>
+     *   <li>Keywords (def, if, for, return, etc.)</li>
+     *   <li>Identifiers (variable names, function names)</li>
+     *   <li>Literals (strings, numbers, booleans)</li>
+     *   <li>Operators (+, -, ==, etc.)</li>
+     *   <li>Indentation (INDENT/DEDENT tokens)</li>
+     *   <li>Comments (skipped)</li>
+     * </ul>
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * GrizzlyLexer lexer = new GrizzlyLexer("x = 42");
+     * List<Token> tokens = lexer.tokenize();
+     * // tokens = [IDENTIFIER("x"), ASSIGN, NUMBER("42"), EOF]
+     * }</pre>
+     * 
+     * @return List of tokens ending with EOF
      */
     public List<Token> tokenize() {
+        GrizzlyLogger.info("LEXER", "Starting tokenization (" + source.length() + " chars)");
+        
         while (!isAtEnd()) {
             tokenizeNext();
         }
         
         addFinalTokens();
+        
+        GrizzlyLogger.info("LEXER", "Tokenization complete (" + tokens.size() + " tokens)");
+        GrizzlyLogger.logTokens(tokens);
+        
         return tokens;
     }
     
@@ -692,11 +832,15 @@ public class GrizzlyLexer {
     // ========== Token Addition Helpers ==========
     
     private void addToken(TokenType type) {
-        tokens.add(new Token(type, line, column));
+        Token token = new Token(type, line, column);
+        tokens.add(token);
+        GrizzlyLogger.trace("LEXER", () -> "Token: " + GrizzlyLogger.formatToken(token));
     }
     
     private void addToken(TokenType type, String value, int startColumn) {
-        tokens.add(new Token(type, value, line, startColumn));
+        Token token = new Token(type, value, line, startColumn);
+        tokens.add(token);
+        GrizzlyLogger.trace("LEXER", () -> "Token: " + GrizzlyLogger.formatToken(token));
     }
     
     private void addTokenAndAdvance(TokenType type) {
