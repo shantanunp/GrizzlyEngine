@@ -16,6 +16,8 @@ public enum TokenType {
     CONTINUE,   // continue
     TRUE,       // true
     FALSE,      // false
+    IMPORT,     // import
+    FROM,       // from (for future use)
     
     // Literals
     IDENTIFIER, // variable names, function names

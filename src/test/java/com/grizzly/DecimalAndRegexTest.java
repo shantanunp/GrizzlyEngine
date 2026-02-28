@@ -189,9 +189,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex match - SSN validation")
     public void testRegexMatchSSN() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                if re_match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
+                if re.match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
                     OUTPUT["validSSN"] = true
                 else:
                     OUTPUT["validSSN"] = false
@@ -213,9 +215,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex match - Email validation")
     public void testRegexMatchEmail() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                if re_match(r"^[\\w\\.-]+@[\\w\\.-]+\\.[\\w]+$", INPUT.email):
+                if re.match(r"^[\\w\\.-]+@[\\w\\.-]+\\.[\\w]+$", INPUT.email):
                     OUTPUT["validEmail"] = true
                 else:
                     OUTPUT["validEmail"] = false
@@ -237,9 +241,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex sub - Remove dashes from SSN")
     public void testRegexSubRemoveDashes() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                cleanSSN = re_sub("-", "", INPUT.ssn)
+                cleanSSN = re.sub("-", "", INPUT.ssn)
                 OUTPUT["ssn"] = cleanSSN
                 return OUTPUT
             """;
@@ -254,9 +260,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex sub - Remove all non-digits")
     public void testRegexSubDigitsOnly() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                digitsOnly = re_sub(r"\\D", "", INPUT.phone)
+                digitsOnly = re.sub(r"\\D", "", INPUT.phone)
                 OUTPUT["phone"] = digitsOnly
                 return OUTPUT
             """;
@@ -271,9 +279,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex findall - Extract all emails")
     public void testRegexFindall() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                emails = re_findall(r"[\\w\\.-]+@[\\w\\.-]+\\.[\\w]+", INPUT.text)
+                emails = re.findall(r"[\\w\\.-]+@[\\w\\.-]+\\.[\\w]+", INPUT.text)
                 OUTPUT["emails"] = emails
                 return OUTPUT
             """;
@@ -295,9 +305,11 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex split - Parse CSV")
     public void testRegexSplit() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                parts = re_split(",", INPUT.csv)
+                parts = re.split(",", INPUT.csv)
                 OUTPUT["firstName"] = parts[0]
                 OUTPUT["lastName"] = parts[1]
                 OUTPUT["email"] = parts[2]
@@ -317,12 +329,14 @@ public class DecimalAndRegexTest {
     @DisplayName("Regex in for loop - Filter valid transactions")
     public void testRegexInForLoop() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
                 OUTPUT["validTransactions"] = []
                 
                 for txn in INPUT.transactions:
-                    if re_match(r"^TXN-\\d{6}$", txn.id):
+                    if re.match(r"^TXN-\\d{6}$", txn.id):
                         OUTPUT["validTransactions"].append(txn.id)
                 
                 return OUTPUT
@@ -354,13 +368,15 @@ public class DecimalAndRegexTest {
     @DisplayName("Combined: Validate SSN and calculate loan")
     public void testDecimalAndRegexCombined() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
                 
                 # Validate SSN
-                if re_match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
+                if re.match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
                     OUTPUT["validSSN"] = true
-                    OUTPUT["ssn"] = re_sub("-", "", INPUT.ssn)
+                    OUTPUT["ssn"] = re.sub("-", "", INPUT.ssn)
                 else:
                     OUTPUT["validSSN"] = false
                     OUTPUT["error"] = "Invalid SSN"
@@ -403,11 +419,13 @@ public class DecimalAndRegexTest {
     @DisplayName("Combined: Clean phone and calculate balance")
     public void testRegexCleanAndDecimalMath() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
                 
                 # Clean phone number
-                cleanPhone = re_sub(r"\\D", "", INPUT.phone)
+                cleanPhone = re.sub(r"\\D", "", INPUT.phone)
                 OUTPUT["phone"] = cleanPhone
                 
                 # Calculate exact balance

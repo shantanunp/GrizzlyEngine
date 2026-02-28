@@ -28,9 +28,11 @@ public class RawStringDebugTest {
     @Test
     public void testRegexMatchSimple() {
         String template = """
+            import re
+            
             def transform(INPUT):
                 OUTPUT = {}
-                match = re_match(r"\\d+", INPUT.text)
+                match = re.match(r"\\d+", INPUT.text)
                 if match:
                     OUTPUT["matched"] = true
                 else:

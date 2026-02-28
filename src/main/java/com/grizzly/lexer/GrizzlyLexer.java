@@ -30,7 +30,9 @@ public class GrizzlyLexer {
         Map.entry("break", TokenType.BREAK),
         Map.entry("continue", TokenType.CONTINUE),
         Map.entry("true", TokenType.TRUE),
-        Map.entry("false", TokenType.FALSE)
+        Map.entry("false", TokenType.FALSE),
+        Map.entry("import", TokenType.IMPORT),
+        Map.entry("from", TokenType.FROM)
     );
     
     // Constants

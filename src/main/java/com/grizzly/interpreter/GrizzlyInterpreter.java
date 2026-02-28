@@ -21,14 +21,22 @@ public class GrizzlyInterpreter {
     
     private final Program program;
     private final Map<String, BuiltinFunction> builtinFunctions = new HashMap<>();
+    private final Map<String, Map<String, BuiltinFunction>> modules = new HashMap<>();
     
     public GrizzlyInterpreter(Program program) {
         this.program = program;
         registerBuiltins();
+        registerModules();
     }
     
     @SuppressWarnings("unchecked")
     public Map<String, Object> execute(Map<String, Object> inputData) {
+        // Execute top-level import statements
+        ExecutionContext globalContext = new ExecutionContext();
+        for (ImportStatement importStmt : program.imports()) {
+            executeStatement(importStmt, globalContext);
+        }
+        
         FunctionDef transformFunc = program.findFunction("transform");
         if (transformFunc == null) {
             throw new GrizzlyExecutionException("No 'transform' function found in template");
@@ -479,35 +487,34 @@ public class GrizzlyInterpreter {
                 return value.toString();
             }
         });
+    }
+    
+    /**
+     * Register module functions (re, decimal, etc.)
+     * 
+     * <p>Modules allow Python-style syntax: `import re` then `re.match()`
+     * 
+     * <p>Supported modules:
+     * <ul>
+     *   <li><b>re</b> - Regular expressions (match, search, findall, sub, split)</li>
+     * </ul>
+     */
+    private void registerModules() {
+        // ═══════════════════════════════════════════════════════════════════════
+        // RE MODULE - Regular expressions (100% Python-compatible!)
+        // ═══════════════════════════════════════════════════════════════════════
         
-        // ─────────────────────────────────────────────────────────────────────
-        // REGEX FUNCTIONS - Pattern matching and text processing
-        // ─────────────────────────────────────────────────────────────────────
+        Map<String, BuiltinFunction> reModule = new HashMap<>();
         
         /**
-         * re_match(pattern, text) - Check if text matches pattern from start.
+         * re.match(pattern, text) - Check if text matches pattern from start.
          * 
-         * <p>Returns a match object (as Map) if successful, null otherwise.
-         * Use in if statements: {@code if re_match(pattern, text)}
-         * 
-         * <p>Examples:
-         * <pre>{@code
-         * // Validate SSN
-         * if re_match("^\d{3}-\d{2}-\d{4}$", INPUT.ssn):
-         *     OUTPUT["validSSN"] = True
-         * 
-         * // Validate email
-         * if re_match("^[\w\.-]+@[\w\.-]+\.\w+$", INPUT.email):
-         *     OUTPUT["validEmail"] = True
-         * }</pre>
-         * 
-         * @param args [0] pattern string, [1] text to match
-         * @return Match object (Map with 'matched' boolean) or null
+         * <p>Python-compatible! Use with: `import re` then `re.match()`
          */
-        builtinFunctions.put("re_match", (args) -> {
+        reModule.put("match", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
-                    "re_match() requires 2 arguments: re_match(pattern, text)"
+                    "re.match() requires 2 arguments: re.match(pattern, text)"
                 );
             }
             
@@ -533,23 +540,14 @@ public class GrizzlyInterpreter {
         });
         
         /**
-         * re_search(pattern, text) - Find first occurrence of pattern in text.
+         * re.search(pattern, text) - Find first occurrence of pattern in text.
          * 
-         * <p>Examples:
-         * <pre>{@code
-         * // Find account number
-         * match = re_search("ACC-\d{6}", INPUT.description)
-         * if match:
-         *     OUTPUT["accountNumber"] = match["value"]
-         * }</pre>
-         * 
-         * @param args [0] pattern string, [1] text to search
-         * @return Match object with 'value' or null
+         * <p>Python-compatible! Use with: `import re` then `re.search()`
          */
-        builtinFunctions.put("re_search", (args) -> {
+        reModule.put("search", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
-                    "re_search() requires 2 arguments: re_search(pattern, text)"
+                    "re.search() requires 2 arguments: re.search(pattern, text)"
                 );
             }
             
@@ -577,27 +575,14 @@ public class GrizzlyInterpreter {
         });
         
         /**
-         * re_findall(pattern, text) - Find all occurrences of pattern.
+         * re.findall(pattern, text) - Find all occurrences of pattern.
          * 
-         * <p>Returns a list of all matches.
-         * 
-         * <p>Examples:
-         * <pre>{@code
-         * // Extract all emails
-         * emails = re_findall("[\w\.-]+@[\w\.-]+\.\w+", INPUT.text)
-         * OUTPUT["emails"] = emails
-         * 
-         * // Extract all phone numbers
-         * phones = re_findall("\d{3}-\d{3}-\d{4}", INPUT.contactInfo)
-         * }</pre>
-         * 
-         * @param args [0] pattern string, [1] text to search
-         * @return List of matched strings
+         * <p>Python-compatible! Use with: `import re` then `re.findall()`
          */
-        builtinFunctions.put("re_findall", (args) -> {
+        reModule.put("findall", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
-                    "re_findall() requires 2 arguments: re_findall(pattern, text)"
+                    "re.findall() requires 2 arguments: re.findall(pattern, text)"
                 );
             }
             
@@ -622,30 +607,14 @@ public class GrizzlyInterpreter {
         });
         
         /**
-         * re_sub(pattern, replacement, text) - Replace pattern matches with replacement.
+         * re.sub(pattern, replacement, text) - Replace pattern matches with replacement.
          * 
-         * <p>Examples:
-         * <pre>{@code
-         * // Remove dashes from SSN
-         * cleanSSN = re_sub("-", "", INPUT.ssn)
-         * // "123-45-6789" → "123456789"
-         * 
-         * // Remove all non-digits
-         * digitsOnly = re_sub("\D", "", INPUT.phone)
-         * // "(555) 123-4567" → "5551234567"
-         * 
-         * // Mask SSN
-         * masked = re_sub("\d(?=\d{4})", "*", INPUT.ssn)
-         * // "123-45-6789" → "***-**-6789"
-         * }</pre>
-         * 
-         * @param args [0] pattern, [1] replacement string, [2] text
-         * @return Text with replacements made
+         * <p>Python-compatible! Use with: `import re` then `re.sub()`
          */
-        builtinFunctions.put("re_sub", (args) -> {
+        reModule.put("sub", (args) -> {
             if (args.size() != 3) {
                 throw new GrizzlyExecutionException(
-                    "re_sub() requires 3 arguments: re_sub(pattern, replacement, text)"
+                    "re.sub() requires 3 arguments: re.sub(pattern, replacement, text)"
                 );
             }
             
@@ -663,26 +632,14 @@ public class GrizzlyInterpreter {
         });
         
         /**
-         * re_split(pattern, text) - Split text by pattern.
+         * re.split(pattern, text) - Split text by pattern.
          * 
-         * <p>Examples:
-         * <pre>{@code
-         * // Split CSV
-         * parts = re_split(",", INPUT.csvLine)
-         * OUTPUT["firstName"] = parts[0]
-         * OUTPUT["lastName"] = parts[1]
-         * 
-         * // Split by multiple delimiters
-         * parts = re_split("[;,|]", INPUT.data)
-         * }</pre>
-         * 
-         * @param args [0] pattern, [1] text to split
-         * @return List of strings
+         * <p>Python-compatible! Use with: `import re` then `re.split()`
          */
-        builtinFunctions.put("re_split", (args) -> {
+        reModule.put("split", (args) -> {
             if (args.size() != 2) {
                 throw new GrizzlyExecutionException(
-                    "re_split() requires 2 arguments: re_split(pattern, text)"
+                    "re.split() requires 2 arguments: re.split(pattern, text)"
                 );
             }
             
@@ -698,6 +655,8 @@ public class GrizzlyInterpreter {
                 );
             }
         });
+        
+        modules.put("re", reModule);
     }
     
     private Object executeFunction(FunctionDef function, ExecutionContext context) {
@@ -714,6 +673,17 @@ public class GrizzlyInterpreter {
     
     private Object executeStatement(Statement stmt, ExecutionContext context) {
         return switch (stmt) {
+            case ImportStatement i -> {
+                // Import statements are no-ops at runtime
+                // Modules are already registered, just validate the module exists
+                if (!modules.containsKey(i.moduleName())) {
+                    throw new GrizzlyExecutionException(
+                        "Unknown module: " + i.moduleName(),
+                        i.lineNumber()
+                    );
+                }
+                yield null;
+            }
             case Assignment a -> executeAssignment(a, context);
             case ReturnStatement r -> evaluateExpression(r.value(), context);
             case FunctionCall f -> executeFunctionCall(f, context);
@@ -1451,6 +1421,29 @@ public class GrizzlyInterpreter {
      */
     @SuppressWarnings("unchecked")
     private Object evaluateMethodCall(MethodCall methodCall, ExecutionContext context) {
+        // Check if this is a module function call (e.g., re.match())
+        if (methodCall.object() instanceof Identifier) {
+            String moduleName = ((Identifier) methodCall.object()).name();
+            String methodName = methodCall.methodName();
+            
+            if (modules.containsKey(moduleName)) {
+                Map<String, BuiltinFunction> module = modules.get(moduleName);
+                if (module.containsKey(methodName)) {
+                    // Evaluate arguments
+                    List<Object> args = new ArrayList<>();
+                    for (Expression argExpr : methodCall.arguments()) {
+                        args.add(evaluateExpression(argExpr, context));
+                    }
+                    // Call the module function
+                    return module.get(methodName).apply(args);
+                } else {
+                    throw new GrizzlyExecutionException(
+                        "Module '" + moduleName + "' has no function '" + methodName + "'"
+                    );
+                }
+            }
+        }
+        
         Object obj = evaluateExpression(methodCall.object(), context);
         String methodName = methodCall.methodName();
         

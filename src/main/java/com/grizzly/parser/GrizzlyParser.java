@@ -29,14 +29,18 @@ public class GrizzlyParser {
      * Parse all tokens into a Program
      */
     public Program parse() {
+        List<ImportStatement> imports = new ArrayList<>();
         List<FunctionDef> functions = new ArrayList<>();
         
         // Skip initial newlines and comments
         skipNewlines();
         
-        // Parse all functions
+        // Parse all top-level statements (imports and functions)
         while (!isAtEnd()) {
-            if (peek().type() == TokenType.DEF) {
+            if (peek().type() == TokenType.IMPORT) {
+                imports.add(parseImportStatement());
+                skipNewlines();
+            } else if (peek().type() == TokenType.DEF) {
                 functions.add(parseFunction());
                 skipNewlines(); // Skip blank lines between functions
             } else if (peek().type() == TokenType.NEWLINE || peek().type() == TokenType.COMMENT) {
@@ -52,7 +56,18 @@ public class GrizzlyParser {
             throw new GrizzlyParseException("No functions found in template");
         }
         
-        return new Program(functions);
+        return new Program(imports, functions);
+    }
+    
+    /**
+     * Parse an import statement
+     * Example: import re
+     */
+    private ImportStatement parseImportStatement() {
+        int lineNumber = peek().line();
+        expect(TokenType.IMPORT, "Expected 'import'");
+        String moduleName = expect(TokenType.IDENTIFIER, "Expected module name").value();
+        return new ImportStatement(moduleName, lineNumber);
     }
     
     /**
@@ -141,6 +156,13 @@ public class GrizzlyParser {
      */
     private Statement parseStatement() {
         int lineNumber = peek().line();
+        
+        // Import statement
+        if (peek().type() == TokenType.IMPORT) {
+            advance(); // Skip 'import'
+            String moduleName = expect(TokenType.IDENTIFIER, "Expected module name after 'import'").value();
+            return new ImportStatement(moduleName, lineNumber);
+        }
         
         // Return statement
         if (peek().type() == TokenType.RETURN) {
