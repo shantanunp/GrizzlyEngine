@@ -8,17 +8,42 @@ import java.util.Map;
 /**
  * Utility class for converting between Grizzly Value types and Java objects.
  * 
- * <p>Used for:
+ * <h2>Purpose</h2>
+ * <p>This class is the <b>bridge</b> between:
  * <ul>
- *   <li>Converting input JSON (Java Maps/Lists) to Value types</li>
- *   <li>Converting Value types back to Java objects for JSON output</li>
+ *   <li>The external world (JSON, Java Maps) where data is untyped</li>
+ *   <li>The internal Grizzly world where all values are type-safe</li>
  * </ul>
  * 
- * <p><b>Example:</b>
+ * <h2>Why Object is Used Here</h2>
+ * <p>JSON is inherently untyped - a JSON value can be a string, number, boolean,
+ * null, array, or object. Java represents this with {@code Object}. This class
+ * is the <b>only place</b> where raw Objects should appear; internally, Grizzly
+ * uses the type-safe {@link Value} hierarchy.
+ * 
  * <pre>{@code
- * // Convert JSON input to Values
- * Map<String, Object> jsonInput = mapper.readValue(json, Map.class);
+ * External World (untyped)     │     Internal World (type-safe)
+ * ─────────────────────────────│─────────────────────────────────
+ * Map<String, Object>    ──────┼────▶  DictValue
+ * List<Object>           ──────┼────▶  ListValue
+ * String                 ──────┼────▶  StringValue
+ * Number                 ──────┼────▶  NumberValue
+ * Boolean                ──────┼────▶  BoolValue
+ * null                   ──────┼────▶  NullValue
+ *                              │
+ *         fromJava()           │           toJava()
+ *         fromJavaMap()        │           toJavaMap()
+ * }</pre>
+ * 
+ * <h2>Example Usage</h2>
+ * <pre>{@code
+ * // Convert JSON input to type-safe Values
+ * Map<String, Object> jsonInput = mapper.readValue(json, 
+ *     new TypeReference<Map<String, Object>>() {});
  * DictValue input = ValueConverter.fromJavaMap(jsonInput);
+ * 
+ * // Now work with type-safe Values internally...
+ * StringValue name = (StringValue) input.get("name");
  * 
  * // Convert Values back to JSON-compatible objects
  * Map<String, Object> jsonOutput = ValueConverter.toJavaMap(output);

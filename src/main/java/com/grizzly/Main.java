@@ -1,5 +1,6 @@
 package com.grizzly;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.nio.file.Files;
@@ -61,12 +62,17 @@ public class Main {
     public static String transform() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         
-        // 1. Read input JSON
+        // 1. Read input JSON (type-safe using TypeReference)
         System.out.println("📖 Reading input data...");
-        Map<String, Object> inputData = mapper.readValue(new File(INPUT_FILE), Map.class);
+        Map<String, Object> inputData = mapper.readValue(
+            new File(INPUT_FILE), 
+            new TypeReference<Map<String, Object>>() {}
+        );
+        
         // 2. Read template
         System.out.println("📖 Reading template...");
         String template = Files.readString(Path.of(TEMPLATE_FILE));
+        
         // 3. Compile template
         System.out.println("🔨 Compiling template...");
         GrizzlyEngine engine = new GrizzlyEngine();
@@ -74,11 +80,11 @@ public class Main {
         GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
         long compileTime = System.currentTimeMillis() - startCompile;
         System.out.println("   ✓ Compiled in " + compileTime + "ms");
-        // 4. Execute transformation
+        
+        // 4. Execute transformation (use executeRaw for Map→Map)
         System.out.println("⚡ Executing transformation...");
         long startExec = System.currentTimeMillis();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> outputData = compiledTemplate.execute(inputData, Map.class);
+        Map<String, Object> outputData = compiledTemplate.executeRaw(inputData);
         long execTime = System.currentTimeMillis() - startExec;
         System.out.println("   ✓ Executed in " + execTime + "ms");
         System.out.println("   ✓ Generated " + outputData.size() + " fields");
