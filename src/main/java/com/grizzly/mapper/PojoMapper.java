@@ -72,7 +72,7 @@ public class PojoMapper {
         
         try {
             // Special handling for DateTimeValue - don't convert it
-            if (pojo instanceof com.grizzly.types.DateTimeValue) {
+            if (pojo instanceof com.grizzly.core.types.DateTimeValue) {
                 return java.util.Collections.singletonMap("value", pojo);
             }
             

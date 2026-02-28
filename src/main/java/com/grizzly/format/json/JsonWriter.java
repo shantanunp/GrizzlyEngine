@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.grizzly.format.FormatException;
 import com.grizzly.format.FormatWriter;
-import com.grizzly.types.DictValue;
-import com.grizzly.types.ValueConverter;
+import com.grizzly.core.types.DictValue;
+import com.grizzly.core.types.ValueConverter;
 
 import java.io.IOException;
 import java.io.OutputStream;

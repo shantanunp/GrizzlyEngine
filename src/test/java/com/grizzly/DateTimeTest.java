@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
@@ -31,7 +34,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         // DateTimeValue is serialized to ISO string in JSON output
@@ -50,7 +53,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         // DateTimeValue is serialized to string, check it contains UTC offset (+0000)
@@ -70,7 +73,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("year")).isEqualTo("2024");
@@ -88,7 +91,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("formatted")).isEqualTo("2024-02-22");
@@ -105,7 +108,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("formatted_slash")).isEqualTo("22/02/2024");
@@ -125,7 +128,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("tomorrow")).isEqualTo("2024-02-23");
@@ -143,7 +146,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("result")).isEqualTo("2024-03-22");
@@ -160,7 +163,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertThat(result.get("result")).isEqualTo("2025-02-22");
@@ -184,9 +187,9 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of("date", "20240220");
-        Map<String, Object> result = compiled.execute(input, Map.class);
+        Map<String, Object> result = compiled.executeRaw(input);
         
         // 20240220 + 5 days = 20240225 = 25/02/2024
         assertThat(result.get("result")).isEqualTo("25/02/2024");
@@ -210,7 +213,7 @@ class DateTimeTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         // Verify all date fields are present

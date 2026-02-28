@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -36,7 +39,7 @@ public class ImportStatementTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         // Valid SSN
         Map<String, Object> result1 = compiled.executeRaw(Map.of("ssn", "123-45-6789"));
@@ -63,7 +66,7 @@ public class ImportStatementTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         Map<String, Object> result1 = compiled.executeRaw(Map.of("text", "abc123"));
         assertEquals(true, result1.get("found"));
@@ -85,7 +88,7 @@ public class ImportStatementTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of("phone", "(555) 123-4567"));
         
         assertEquals("5551234567", result.get("phone"));
@@ -103,7 +106,7 @@ public class ImportStatementTest {
             """;
         
         // Should throw during compilation/execution
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         assertThrows(Exception.class, () -> {
             compiled.executeRaw(Map.of());
         });
@@ -131,7 +134,7 @@ public class ImportStatementTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of("text", "123"));
         
         assertEquals(true, result.get("isNumber"));

@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -34,7 +37,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertEquals("1234.56", result.get("amount"));
@@ -55,7 +58,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         // With floats this would be "0.30000000000000004"
@@ -77,7 +80,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         // With floats: 0.30 * 3 = 0.8999999999999999
@@ -104,7 +107,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of("amount", "10000.00");
         Map<String, Object> result = compiled.executeRaw(input);
         
@@ -126,7 +129,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertEquals("1000.00", result.get("monthly"));
@@ -148,7 +151,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         // Test premium tier
         Map<String, Object> result1 = compiled.executeRaw(Map.of("balance", "5000.00"));
@@ -173,7 +176,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         assertEquals("1234.57", result.get("cents"));
@@ -200,7 +203,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         // Valid SSN
         Map<String, Object> result1 = compiled.executeRaw(Map.of("ssn", "123-45-6789"));
@@ -226,7 +229,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         // Valid email
         Map<String, Object> result1 = compiled.executeRaw(Map.of("email", "user@example.com"));
@@ -250,7 +253,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of("ssn", "123-45-6789"));
         
         assertEquals("123456789", result.get("ssn"));
@@ -269,7 +272,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of("phone", "(555) 123-4567"));
         
         assertEquals("5551234567", result.get("phone"));
@@ -288,7 +291,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of(
             "text", "Contact: john@example.com or jane@test.org for info"
         );
@@ -316,7 +319,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of("csv", "John,Doe,john@example.com");
         Map<String, Object> result = compiled.executeRaw(input);
         
@@ -342,7 +345,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of(
             "transactions", List.of(
                 Map.of("id", "TXN-123456"),
@@ -397,7 +400,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of(
             "ssn", "123-45-6789",
             "amount", "10000.00",
@@ -446,7 +449,7 @@ public class DecimalAndRegexTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> input = Map.of(
             "phone", "(555) 123-4567",
             "deposits", "75000.50",

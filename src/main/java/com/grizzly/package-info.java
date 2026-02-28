@@ -14,26 +14,18 @@
  *   <li><b>Production Ready</b>: Built-in safeguards for loops, recursion, timeouts</li>
  * </ul>
  * 
- * <h2>Quick Start</h2>
+ * <h2>Quick Start (JSON)</h2>
  * 
  * <pre>{@code
- * // Create engine
- * GrizzlyEngine engine = new GrizzlyEngine();
- * 
- * // Write template
- * String template = """
+ * // Use JsonTemplate for JSON transformations
+ * JsonTemplate template = JsonTemplate.compile("""
  *     def transform(INPUT):
  *         OUTPUT = {}
  *         OUTPUT["fullName"] = INPUT["firstName"] + " " + INPUT["lastName"]
  *         return OUTPUT
- *     """;
+ *     """);
  * 
- * // Compile and execute
- * GrizzlyTemplate compiled = engine.compileFromString(template);
- * Map<String, Object> input = Map.of("firstName", "John", "lastName", "Doe");
- * Map<String, Object> result = compiled.executeRaw(input);
- * 
- * System.out.println(result.get("fullName")); // "John Doe"
+ * String result = template.transform("{\"firstName\": \"John\", \"lastName\": \"Doe\"}");
  * }</pre>
  * 
  * <h2>How It Works</h2>
@@ -48,17 +40,18 @@
  * <h2>Package Structure</h2>
  * 
  * <ul>
- *   <li>{@link com.grizzly} - Main engine and template classes</li>
- *   <li>{@link com.grizzly.lexer} - Tokenization (source → tokens)</li>
- *   <li>{@link com.grizzly.parser} - Parsing (tokens → AST)</li>
- *   <li>{@link com.grizzly.parser.ast} - AST node definitions</li>
- *   <li>{@link com.grizzly.interpreter} - Execution (AST → result)</li>
- *   <li>{@link com.grizzly.types} - Type-safe value hierarchy</li>
- *   <li>{@link com.grizzly.logging} - Debug logging utilities</li>
+ *   <li>{@code com.grizzly} - Entry point (Main class)</li>
+ *   <li>{@code com.grizzly.core} - Core engine (GrizzlyEngine, GrizzlyTemplate)</li>
+ *   <li>{@code com.grizzly.core.lexer} - Tokenization (source → tokens)</li>
+ *   <li>{@code com.grizzly.core.parser} - Parsing (tokens → AST)</li>
+ *   <li>{@code com.grizzly.core.interpreter} - Execution (AST → result)</li>
+ *   <li>{@code com.grizzly.core.types} - Type-safe value hierarchy</li>
+ *   <li>{@code com.grizzly.format} - Format handling (pluggable readers/writers)</li>
+ *   <li>{@code com.grizzly.format.json} - JSON support (JsonTemplate)</li>
  * </ul>
  * 
- * @see com.grizzly.GrizzlyEngine Main entry point
- * @see com.grizzly.GrizzlyTemplate Compiled template
- * @see com.grizzly.logging.GrizzlyLogger Debug logging
+ * @see com.grizzly.core.GrizzlyEngine Core compilation engine
+ * @see com.grizzly.core.GrizzlyTemplate Core format-agnostic template
+ * @see com.grizzly.format.json.JsonTemplate JSON convenience wrapper
  */
 package com.grizzly;

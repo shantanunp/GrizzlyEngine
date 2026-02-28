@@ -1,6 +1,6 @@
 package com.grizzly.format;
 
-import com.grizzly.types.DictValue;
+import com.grizzly.core.types.DictValue;
 
 import java.io.OutputStream;
 

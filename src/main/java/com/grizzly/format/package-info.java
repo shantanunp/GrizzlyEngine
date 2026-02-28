@@ -1,57 +1,48 @@
 /**
- * Format handling for multi-format transformations.
+ * Format handling for data transformations.
  * 
  * <p>This package provides pluggable format support for the Grizzly engine,
- * enabling transformations between different data formats:
+ * enabling transformations between different data formats.
  * 
+ * <h2>Currently Supported</h2>
  * <ul>
- *   <li>JSON ↔ JSON</li>
- *   <li>JSON → XML</li>
- *   <li>XML → JSON</li>
- *   <li>XML ↔ XML</li>
- *   <li>Future: YAML, CSV, etc.</li>
+ *   <li>JSON (via {@code com.grizzly.format.json})</li>
  * </ul>
+ * 
+ * <h2>Future Extensions</h2>
+ * <p>The architecture supports adding new formats (XML, YAML, CSV, etc.)
+ * by implementing {@link FormatReader} and {@link FormatWriter}.
  * 
  * <h2>Architecture</h2>
  * <pre>{@code
- * ┌──────────────────────────────────────────────────────────────────────────┐
- * │                         FORMAT LAYER                                     │
- * ├──────────────────────────────────────────────────────────────────────────┤
- * │                                                                          │
- * │  ┌──────────┐  ┌──────────┐           ┌──────────┐  ┌──────────┐        │
- * │  │   JSON   │  │   XML    │           │   JSON   │  │   XML    │        │
- * │  │  Input   │  │  Input   │           │  Output  │  │  Output  │        │
- * │  └────┬─────┘  └────┬─────┘           └────▲─────┘  └────▲─────┘        │
- * │       │             │                      │             │              │
- * │       ▼             ▼                      │             │              │
- * │  ┌─────────────────────────┐    ┌──────────────────────────────┐        │
- * │  │     FormatReader        │    │      FormatWriter            │        │
- * │  │  ┌─────────┐ ┌────────┐ │    │  ┌─────────┐ ┌────────┐     │        │
- * │  │  │JsonReader│ │XmlReader│ │    │  │JsonWriter│ │XmlWriter│     │        │
- * │  │  └────┬────┘ └───┬────┘ │    │  └────▲────┘ └───▲────┘     │        │
- * │  └───────┼──────────┼──────┘    └───────┼──────────┼──────────┘        │
- * │          │          │                   │          │                    │
- * │          ▼          ▼                   │          │                    │
- * │       ┌──────────────────┐         ┌────┴──────────┴────┐               │
- * │       │    DictValue     │────────▶│     DictValue      │               │
- * │       │   (INPUT)        │  Engine │    (OUTPUT)        │               │
- * │       └──────────────────┘         └────────────────────┘               │
- * │                                                                          │
- * └──────────────────────────────────────────────────────────────────────────┘
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │                         FORMAT LAYER                             │
+ * ├──────────────────────────────────────────────────────────────────┤
+ * │                                                                  │
+ * │  ┌──────────────────┐                 ┌──────────────────┐       │
+ * │  │   JsonReader     │                 │   JsonWriter     │       │
+ * │  │  (String → Dict) │                 │  (Dict → String) │       │
+ * │  └────────┬─────────┘                 └────────▲─────────┘       │
+ * │           │                                    │                 │
+ * │           ▼                                    │                 │
+ * │  ┌──────────────────┐    Core Engine    ┌──────┴─────────┐       │
+ * │  │    DictValue     │──────────────────▶│   DictValue    │       │
+ * │  │    (INPUT)       │                   │   (OUTPUT)     │       │
+ * │  └──────────────────┘                   └────────────────┘       │
+ * │                                                                  │
+ * └──────────────────────────────────────────────────────────────────┘
  * }</pre>
  * 
  * <h2>Usage</h2>
  * <pre>{@code
- * // Get the default registry (JSON + XML)
+ * // Option 1: Use JsonTemplate (recommended)
+ * JsonTemplate template = JsonTemplate.compile(templateCode);
+ * String output = template.transform(jsonInput);
+ * 
+ * // Option 2: Use FormatRegistry directly
  * FormatRegistry registry = FormatRegistry.defaultRegistry();
- * 
- * // Read XML input
- * DictValue input = registry.getReader("xml").read(xmlString);
- * 
- * // Execute transformation
- * DictValue output = interpreter.executeTyped(input);
- * 
- * // Write as JSON
+ * DictValue input = registry.getReader("json").read(jsonString);
+ * DictValue output = coreTemplate.execute(input);
  * String json = registry.getWriter("json").write(output);
  * }</pre>
  * 
@@ -70,6 +61,5 @@
  * @see com.grizzly.format.FormatWriter Interface for writing formats
  * @see com.grizzly.format.FormatRegistry Central registry for formats
  * @see com.grizzly.format.json JSON format handlers
- * @see com.grizzly.format.xml XML format handlers
  */
 package com.grizzly.format;

@@ -2,8 +2,6 @@ package com.grizzly.format;
 
 import com.grizzly.format.json.JsonReader;
 import com.grizzly.format.json.JsonWriter;
-import com.grizzly.format.xml.XmlReader;
-import com.grizzly.format.xml.XmlWriter;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -14,13 +12,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class FormatRegistryTest {
     
     @Test
-    void defaultRegistryHasJsonAndXml() {
+    void defaultRegistryHasJson() {
         FormatRegistry registry = FormatRegistry.createDefaultRegistry();
         
         assertTrue(registry.hasReader("json"));
         assertTrue(registry.hasWriter("json"));
-        assertTrue(registry.hasReader("xml"));
-        assertTrue(registry.hasWriter("xml"));
     }
     
     @Test
@@ -28,7 +24,6 @@ class FormatRegistryTest {
         FormatRegistry registry = FormatRegistry.createDefaultRegistry();
         
         assertInstanceOf(JsonReader.class, registry.getReader("json"));
-        assertInstanceOf(XmlReader.class, registry.getReader("xml"));
     }
     
     @Test
@@ -36,7 +31,6 @@ class FormatRegistryTest {
         FormatRegistry registry = FormatRegistry.createDefaultRegistry();
         
         assertInstanceOf(JsonWriter.class, registry.getWriter("json"));
-        assertInstanceOf(XmlWriter.class, registry.getWriter("xml"));
     }
     
     @Test
@@ -47,9 +41,9 @@ class FormatRegistryTest {
         assertTrue(registry.hasReader("Json"));
         assertTrue(registry.hasReader("json"));
         
-        assertTrue(registry.hasWriter("XML"));
-        assertTrue(registry.hasWriter("Xml"));
-        assertTrue(registry.hasWriter("xml"));
+        assertTrue(registry.hasWriter("JSON"));
+        assertTrue(registry.hasWriter("Json"));
+        assertTrue(registry.hasWriter("json"));
     }
     
     @Test
@@ -92,8 +86,7 @@ class FormatRegistryTest {
         var formats = registry.getReaderFormats();
         
         assertTrue(formats.contains("json"));
-        assertTrue(formats.contains("xml"));
-        assertEquals(2, formats.size());
+        assertEquals(1, formats.size());
     }
     
     @Test
@@ -103,8 +96,7 @@ class FormatRegistryTest {
         var formats = registry.getWriterFormats();
         
         assertTrue(formats.contains("json"));
-        assertTrue(formats.contains("xml"));
-        assertEquals(2, formats.size());
+        assertEquals(1, formats.size());
     }
     
     @Test

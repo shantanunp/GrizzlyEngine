@@ -1,13 +1,21 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+import com.grizzly.mapper.PojoMapper;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class GrizzlyEnginePojoTest {
     @TempDir Path tempDir;
+    
+    private final PojoMapper pojoMapper = new PojoMapper();
     
     static class Customer {
         private String customerId, firstName, lastName;
@@ -81,7 +89,11 @@ class GrizzlyEnginePojoTest {
         Customer customer = new Customer("C123", "John", "Doe", personalInfo);
         
         GrizzlyEngine engine = new GrizzlyEngine();
-        CustomerDTO result = engine.transform(customer, templateFile.toString(), CustomerDTO.class);
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
+        
+        Map<String, Object> inputMap = pojoMapper.pojoToMap(customer);
+        Map<String, Object> outputMap = compiled.executeRaw(inputMap);
+        CustomerDTO result = pojoMapper.mapToPojo(outputMap, CustomerDTO.class);
         
         assertThat(result.getId()).isEqualTo("C123");
         assertThat(result.getFullName()).isEqualTo("John");
@@ -104,15 +116,15 @@ class GrizzlyEnginePojoTest {
         Files.writeString(templateFile, template);
         
         GrizzlyEngine engine = new GrizzlyEngine();
-        GrizzlyTemplate compiled = engine.compile(templateFile.toString());
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
         
         Customer customer1 = new Customer("C1", "John", "Doe", null);
         Customer customer2 = new Customer("C2", "Jane", "Smith", null);
         Customer customer3 = new Customer("C3", "Bob", "Johnson", null);
         
-        CustomerDTO dto1 = compiled.execute(customer1, CustomerDTO.class);
-        CustomerDTO dto2 = compiled.execute(customer2, CustomerDTO.class);
-        CustomerDTO dto3 = compiled.execute(customer3, CustomerDTO.class);
+        CustomerDTO dto1 = pojoMapper.mapToPojo(compiled.executeRaw(pojoMapper.pojoToMap(customer1)), CustomerDTO.class);
+        CustomerDTO dto2 = pojoMapper.mapToPojo(compiled.executeRaw(pojoMapper.pojoToMap(customer2)), CustomerDTO.class);
+        CustomerDTO dto3 = pojoMapper.mapToPojo(compiled.executeRaw(pojoMapper.pojoToMap(customer3)), CustomerDTO.class);
         
         assertThat(dto1.getId()).isEqualTo("C1");
         assertThat(dto1.getFullName()).isEqualTo("John");

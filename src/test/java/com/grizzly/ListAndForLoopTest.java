@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,10 +27,10 @@ public class ListAndForLoopTest {
         GrizzlyEngine engine = new GrizzlyEngine();
         Map<String, Object> input = Map.of();
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         assertTrue(result.containsKey("items"));
         assertTrue(result.get("items") instanceof List);
@@ -47,10 +50,10 @@ public class ListAndForLoopTest {
         GrizzlyEngine engine = new GrizzlyEngine();
         Map<String, Object> input = Map.of();
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("numbers");
@@ -75,10 +78,10 @@ public class ListAndForLoopTest {
         GrizzlyEngine engine = new GrizzlyEngine();
         Map<String, Object> input = Map.of();
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         @SuppressWarnings("unchecked")
         List<Object> items = (List<Object>) result.get("items");
@@ -109,10 +112,10 @@ public class ListAndForLoopTest {
             )
         );
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         @SuppressWarnings("unchecked")
         List<Object> names = (List<Object>) result.get("names");
@@ -146,10 +149,10 @@ public class ListAndForLoopTest {
             )
         );
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> users = (List<Map<String, Object>>) result.get("users");
@@ -184,10 +187,10 @@ public class ListAndForLoopTest {
             )
         );
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         @SuppressWarnings("unchecked")
         List<Object> adults = (List<Object>) result.get("adults");
@@ -213,10 +216,10 @@ public class ListAndForLoopTest {
             "name", "Grizzly"
         );
         
-        GrizzlyTemplate compiledTemplate = engine.compileFromString(template);
+        GrizzlyTemplate compiledTemplate = engine.compile(template);
         
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiledTemplate.execute(input, Map.class);
+        Map<String, Object> result = compiledTemplate.executeRaw(input);
         
         assertEquals(3, result.get("customerCount"));
         assertEquals(7, result.get("nameLength"));

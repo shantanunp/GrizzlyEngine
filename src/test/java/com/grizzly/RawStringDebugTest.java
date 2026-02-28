@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.Map;
@@ -18,7 +21,7 @@ public class RawStringDebugTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(Map.of());
         
         System.out.println("Pattern result: " + result.get("pattern"));
@@ -40,7 +43,7 @@ public class RawStringDebugTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         Map<String, Object> result1 = compiled.executeRaw(Map.of("text", "123"));
         System.out.println("Result for '123': " + result1);

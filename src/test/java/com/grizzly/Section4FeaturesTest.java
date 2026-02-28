@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
@@ -35,15 +38,15 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
-        Map<String, Object> result1 = compiled.execute(Map.of("value", -5), Map.class);
+        Map<String, Object> result1 = compiled.executeRaw(Map.of("value", -5));
         assertThat(result1.get("status")).isEqualTo("negative");
         
-        Map<String, Object> result2 = compiled.execute(Map.of("value", 0), Map.class);
+        Map<String, Object> result2 = compiled.executeRaw(Map.of("value", 0));
         assertThat(result2.get("status")).isEqualTo("zero");
         
-        Map<String, Object> result3 = compiled.execute(Map.of("value", 5), Map.class);
+        Map<String, Object> result3 = compiled.executeRaw(Map.of("value", 5));
         assertThat(result3.get("status")).isEqualTo("positive");
     }
     
@@ -68,13 +71,13 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
-        assertThat(compiled.execute(Map.of("score", 95), Map.class).get("grade")).isEqualTo("A");
-        assertThat(compiled.execute(Map.of("score", 85), Map.class).get("grade")).isEqualTo("B");
-        assertThat(compiled.execute(Map.of("score", 75), Map.class).get("grade")).isEqualTo("C");
-        assertThat(compiled.execute(Map.of("score", 65), Map.class).get("grade")).isEqualTo("D");
-        assertThat(compiled.execute(Map.of("score", 50), Map.class).get("grade")).isEqualTo("F");
+        assertThat(compiled.executeRaw(Map.of("score", 95)).get("grade")).isEqualTo("A");
+        assertThat(compiled.executeRaw(Map.of("score", 85)).get("grade")).isEqualTo("B");
+        assertThat(compiled.executeRaw(Map.of("score", 75)).get("grade")).isEqualTo("C");
+        assertThat(compiled.executeRaw(Map.of("score", 65)).get("grade")).isEqualTo("D");
+        assertThat(compiled.executeRaw(Map.of("score", 50)).get("grade")).isEqualTo("F");
     }
     
     @Test
@@ -92,15 +95,15 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
-        Map<String, Object> result1 = compiled.execute(Map.of("value", -1), Map.class);
+        Map<String, Object> result1 = compiled.executeRaw(Map.of("value", -1));
         assertThat(result1.get("result")).isEqualTo("negative");
         
-        Map<String, Object> result2 = compiled.execute(Map.of("value", 0), Map.class);
+        Map<String, Object> result2 = compiled.executeRaw(Map.of("value", 0));
         assertThat(result2.get("result")).isEqualTo("zero");
         
-        Map<String, Object> result3 = compiled.execute(Map.of("value", 5), Map.class);
+        Map<String, Object> result3 = compiled.executeRaw(Map.of("value", 5));
         assertThat(result3.get("result")).isNull();
     }
     
@@ -115,8 +118,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("numbers");
@@ -132,8 +135,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("numbers");
@@ -149,8 +152,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("evens");
@@ -166,8 +169,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("countdown");
@@ -187,8 +190,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> squares = (List<Object>) result.get("squares");
@@ -212,8 +215,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> items = (List<Object>) result.get("items");
@@ -236,8 +239,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> pairs = (List<Object>) result.get("pairs");
@@ -265,8 +268,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> odds = (List<Object>) result.get("odds");
@@ -289,8 +292,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> filtered = (List<Object>) result.get("filtered");
@@ -318,8 +321,8 @@ class Section4FeaturesTest {
                 return OUTPUT
             """;
         
-        GrizzlyTemplate compiled = engine.compileFromString(template);
-        Map<String, Object> result = compiled.execute(Map.of(), Map.class);
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(Map.of());
         
         @SuppressWarnings("unchecked")
         List<Object> numbers = (List<Object>) result.get("numbers");

@@ -1,24 +1,21 @@
 /**
- * JSON format support for Grizzly Engine.
+ * JSON format handling for Grizzly Engine.
  * 
- * <p>This package provides JSON reading and writing capabilities using Jackson.
+ * <p>This package provides JSON input/output support:
+ * <ul>
+ *   <li>{@link com.grizzly.format.json.JsonReader} - Parse JSON to DictValue</li>
+ *   <li>{@link com.grizzly.format.json.JsonWriter} - Write DictValue to JSON</li>
+ *   <li>{@link com.grizzly.format.json.JsonTemplate} - High-level JSON wrapper</li>
+ * </ul>
  * 
- * <h2>Reading JSON</h2>
+ * <h2>Quick Start</h2>
  * <pre>{@code
- * JsonReader reader = new JsonReader();
- * DictValue data = reader.read("{\"name\": \"John\", \"age\": 30}");
+ * // Compile and use directly
+ * JsonTemplate template = JsonTemplate.compile(templateCode);
+ * String output = template.transform(jsonInput);
  * }</pre>
  * 
- * <h2>Writing JSON</h2>
- * <pre>{@code
- * JsonWriter writer = new JsonWriter();
- * String json = writer.write(dictValue);
- * 
- * // Compact output (no pretty-printing)
- * String compact = new JsonWriter().compact().write(dictValue);
- * }</pre>
- * 
- * @see com.grizzly.format.json.JsonReader For parsing JSON
- * @see com.grizzly.format.json.JsonWriter For generating JSON
+ * @see com.grizzly.format.json.JsonTemplate Main entry point for JSON transformations
+ * @see com.grizzly.core.GrizzlyTemplate Core format-agnostic template
  */
 package com.grizzly.format.json;

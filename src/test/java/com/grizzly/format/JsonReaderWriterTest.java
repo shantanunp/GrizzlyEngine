@@ -2,12 +2,12 @@ package com.grizzly.format;
 
 import com.grizzly.format.json.JsonReader;
 import com.grizzly.format.json.JsonWriter;
-import com.grizzly.types.DictValue;
-import com.grizzly.types.ListValue;
-import com.grizzly.types.NumberValue;
-import com.grizzly.types.StringValue;
-import com.grizzly.types.BoolValue;
-import com.grizzly.types.NullValue;
+import com.grizzly.core.types.DictValue;
+import com.grizzly.core.types.ListValue;
+import com.grizzly.core.types.NumberValue;
+import com.grizzly.core.types.StringValue;
+import com.grizzly.core.types.BoolValue;
+import com.grizzly.core.types.NullValue;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -1,5 +1,8 @@
 package com.grizzly;
 
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +23,6 @@ class GrizzlyEngineTest {
     
     @Test
     void shouldTransformSimpleTemplate() throws Exception {
-        // Create template
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
@@ -31,21 +33,13 @@ class GrizzlyEngineTest {
         Path templateFile = tempDir.resolve("transform.py");
         Files.writeString(templateFile, template);
         
-        // Create input
         Map<String, Object> input = new HashMap<>();
         input.put("customerId", "C123");
         
-        // Execute
         GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
+        Map<String, Object> result = compiled.executeRaw(input);
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = engine.transform(
-            input, 
-            templateFile.toString(), 
-            Map.class
-        );
-        
-        // Verify
         assertThat(result).containsEntry("clientReference", "C123");
     }
     
@@ -61,24 +55,16 @@ class GrizzlyEngineTest {
         Path templateFile = tempDir.resolve("transform.py");
         Files.writeString(templateFile, template);
         
-        // Create nested input
         Map<String, Object> personalInfo = new HashMap<>();
         personalInfo.put("email", "john@example.com");
         
         Map<String, Object> input = new HashMap<>();
         input.put("personalInfo", personalInfo);
         
-        // Execute
         GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
+        Map<String, Object> result = compiled.executeRaw(input);
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = engine.transform(
-            input, 
-            templateFile.toString(), 
-            Map.class
-        );
-        
-        // Verify nested structure
         assertThat(result).containsKey("profile");
         
         @SuppressWarnings("unchecked")
@@ -102,29 +88,16 @@ class GrizzlyEngineTest {
         Files.writeString(templateFile, template);
         
         GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
         
-        // Test PREMIUM
         Map<String, Object> premiumInput = new HashMap<>();
         premiumInput.put("type", "PREMIUM");
-        
-        @SuppressWarnings("unchecked")
-        Map<String, Object> premiumResult = engine.transform(
-            premiumInput, 
-            templateFile.toString(), 
-            Map.class
-        );
+        Map<String, Object> premiumResult = compiled.executeRaw(premiumInput);
         assertThat(premiumResult).containsEntry("level", "GOLD");
         
-        // Test non-PREMIUM
         Map<String, Object> regularInput = new HashMap<>();
         regularInput.put("type", "REGULAR");
-        
-        @SuppressWarnings("unchecked")
-        Map<String, Object> regularResult = engine.transform(
-            regularInput, 
-            templateFile.toString(), 
-            Map.class
-        );
+        Map<String, Object> regularResult = compiled.executeRaw(regularInput);
         assertThat(regularResult).containsEntry("level", "SILVER");
     }
     
@@ -145,23 +118,15 @@ class GrizzlyEngineTest {
         Path templateFile = tempDir.resolve("transform.py");
         Files.writeString(templateFile, template);
         
-        // Create input
         Map<String, Object> input = new HashMap<>();
         input.put("customerId", "C123");
         input.put("firstName", "John");
         input.put("email", "john@example.com");
         
-        // Execute
         GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
+        Map<String, Object> result = compiled.executeRaw(input);
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = engine.transform(
-            input, 
-            templateFile.toString(), 
-            Map.class
-        );
-        
-        // Verify
         assertThat(result)
             .containsEntry("id", "C123")
             .containsEntry("name", "John")
@@ -180,19 +145,19 @@ class GrizzlyEngineTest {
         Path templateFile = tempDir.resolve("transform.py");
         Files.writeString(templateFile, template);
         
-        GrizzlyEngine engine = new GrizzlyEngine(true); // Enable caching
+        GrizzlyEngine engine = new GrizzlyEngine(true);
         
-        // First execution - should compile
         Map<String, Object> input1 = Map.of("customerId", "C1");
-        engine.transform(input1, templateFile.toString(), Map.class);
+        GrizzlyTemplate compiled1 = engine.compileFromFile(templateFile.toString());
+        compiled1.executeRaw(input1);
         
         assertThat(engine.getCacheSize()).isEqualTo(1);
         
-        // Second execution - should use cache
         Map<String, Object> input2 = Map.of("customerId", "C2");
-        engine.transform(input2, templateFile.toString(), Map.class);
+        GrizzlyTemplate compiled2 = engine.compileFromFile(templateFile.toString());
+        compiled2.executeRaw(input2);
         
-        assertThat(engine.getCacheSize()).isEqualTo(1); // Still 1 (same template)
+        assertThat(engine.getCacheSize()).isEqualTo(1);
     }
     
     @Test
@@ -205,12 +170,10 @@ class GrizzlyEngineTest {
             """;
         
         GrizzlyEngine engine = new GrizzlyEngine();
-        GrizzlyTemplate compiled = engine.compileFromString(template);
+        GrizzlyTemplate compiled = engine.compile(template);
         
         Map<String, Object> input = new HashMap<>();
-        
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = compiled.execute(input, Map.class);
+        Map<String, Object> result = compiled.executeRaw(input);
         
         assertThat(result).containsEntry("result", "success");
     }
@@ -231,27 +194,14 @@ class GrizzlyEngineTest {
         Files.writeString(templateFile, template);
         
         GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compileFromFile(templateFile.toString());
         
-        // Test adult
         Map<String, Object> adultInput = Map.of("age", 25);
-        
-        @SuppressWarnings("unchecked")
-        Map<String, Object> adultResult = engine.transform(
-            adultInput, 
-            templateFile.toString(), 
-            Map.class
-        );
+        Map<String, Object> adultResult = compiled.executeRaw(adultInput);
         assertThat(adultResult).containsEntry("status", "adult");
         
-        // Test minor
         Map<String, Object> minorInput = Map.of("age", 15);
-        
-        @SuppressWarnings("unchecked")
-        Map<String, Object> minorResult = engine.transform(
-            minorInput, 
-            templateFile.toString(), 
-            Map.class
-        );
+        Map<String, Object> minorResult = compiled.executeRaw(minorInput);
         assertThat(minorResult).containsEntry("status", "minor");
     }
 }

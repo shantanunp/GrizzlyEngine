@@ -13,14 +13,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * <h2>Usage</h2>
  * <pre>{@code
- * // Get the default registry (JSON + XML pre-registered)
+ * // Get the default registry (JSON pre-registered)
  * FormatRegistry registry = FormatRegistry.defaultRegistry();
  * 
  * // Read JSON
  * DictValue data = registry.getReader("json").read(jsonString);
  * 
- * // Write as XML
- * String xml = registry.getWriter("xml").write(data);
+ * // Write JSON
+ * String json = registry.getWriter("json").write(data);
  * }</pre>
  * 
  * <h2>Registering Custom Formats</h2>
@@ -47,7 +47,7 @@ public class FormatRegistry {
     }
     
     /**
-     * Get the default registry with JSON and XML formats pre-registered.
+     * Get the default registry with JSON format pre-registered.
      * 
      * <p>This method is thread-safe and returns a singleton instance.
      * 
@@ -67,7 +67,7 @@ public class FormatRegistry {
     /**
      * Create a new default registry (for testing or custom instances).
      * 
-     * @return A new registry with JSON and XML formats registered
+     * @return A new registry with JSON format registered
      */
     public static FormatRegistry createDefaultRegistry() {
         FormatRegistry registry = new FormatRegistry();
@@ -75,10 +75,6 @@ public class FormatRegistry {
         // Register JSON handlers
         registry.registerReader("json", new com.grizzly.format.json.JsonReader());
         registry.registerWriter("json", new com.grizzly.format.json.JsonWriter());
-        
-        // Register XML handlers
-        registry.registerReader("xml", new com.grizzly.format.xml.XmlReader());
-        registry.registerWriter("xml", new com.grizzly.format.xml.XmlWriter());
         
         return registry;
     }
