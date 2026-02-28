@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grizzly.core.GrizzlyEngine;
 import com.grizzly.core.GrizzlyTemplate;
+import com.grizzly.core.logging.GrizzlyLogger;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -33,6 +34,10 @@ public class Main {
     
     public static void main(String[] args) {
         try {
+            // Enable debug logging to see Lexer/Parser/Interpreter details
+            // Options: TRACE (most verbose), DEBUG, INFO, WARN, ERROR, OFF
+            GrizzlyLogger.setLevel(GrizzlyLogger.LogLevel.DEBUG);
+            
             System.out.println("Grizzly Engine - Data Transformation");
             System.out.println("=====================================");
             System.out.println();
