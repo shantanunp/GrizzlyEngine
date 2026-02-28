@@ -25,9 +25,9 @@ public class MainApplicationTest {
 
         // Transform JSON
         long startExec = System.currentTimeMillis();
-
         String output = template.transform(input);
         long execTime = System.currentTimeMillis() - startExec;
+
         info("MainApplicationTest", "  Compiled in " + compileTime + " ms");
         info("MainApplicationTest", "   Executed in " + execTime + " ms");
         info("MainApplicationTest", output);
