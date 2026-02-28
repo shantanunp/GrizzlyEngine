@@ -5,14 +5,14 @@ import com.grizzly.parser.ast.*;
 import com.grizzly.types.*;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Grizzly Interpreter - Executes the AST (Abstract Syntax Tree)
+ * Grizzly Interpreter - Executes the AST (Abstract Syntax Tree).
  * 
  * <p>Uses type-safe Value hierarchy instead of raw Object types.
+ * Includes production safeguards for loop limits, recursion depth, and timeouts.
  */
 public class GrizzlyInterpreter {
     
@@ -25,13 +25,23 @@ public class GrizzlyInterpreter {
     }
     
     private final Program program;
-    private final Map<String, BuiltinFunction> builtinFunctions = new HashMap<>();
-    private final Map<String, Map<String, BuiltinFunction>> modules = new HashMap<>();
+    private final InterpreterConfig config;
+    private final BuiltinRegistry builtins;
+    private final ModuleRegistry modules;
+    
+    // Execution state for safeguards
+    private int currentRecursionDepth = 0;
+    private long executionStartTime;
     
     public GrizzlyInterpreter(Program program) {
+        this(program, InterpreterConfig.defaults());
+    }
+    
+    public GrizzlyInterpreter(Program program, InterpreterConfig config) {
         this.program = program;
-        registerBuiltins();
-        registerModules();
+        this.config = config;
+        this.builtins = new BuiltinRegistry();
+        this.modules = new ModuleRegistry();
     }
     
     /**
@@ -41,6 +51,9 @@ public class GrizzlyInterpreter {
      * @return Output data as Java Map (for JSON serialization)
      */
     public Map<String, Object> execute(Map<String, Object> inputData) {
+        executionStartTime = System.currentTimeMillis();
+        currentRecursionDepth = 0;
+        
         ExecutionContext globalContext = new ExecutionContext();
         for (ImportStatement importStmt : program.imports()) {
             executeStatement(importStmt, globalContext);
@@ -65,478 +78,51 @@ public class GrizzlyInterpreter {
             result.typeName());
     }
     
-    /**
-     * Sets up all the built-in functions.
-     */
-    private void registerBuiltins() {
-        // len() function
-        builtinFunctions.put("len", (args) -> {
-            if (args.size() != 1) {
-                throw new GrizzlyExecutionException(
-                    "len() takes exactly 1 argument, got " + args.size()
-                );
-            }
-            
-            Value val = args.get(0);
-            
-            return switch (val) {
-                case ListValue l -> NumberValue.of(l.size());
-                case DictValue d -> NumberValue.of(d.size());
-                case StringValue s -> NumberValue.of(s.value().length());
-                default -> throw new GrizzlyExecutionException(
-                    "len() argument must be a list, dict, or string, got: " + val.typeName()
-                );
-            };
-        });
-        
-        // range() function
-        builtinFunctions.put("range", (args) -> {
-            if (args.size() < 1 || args.size() > 3) {
-                throw new GrizzlyExecutionException(
-                    "range() takes 1-3 arguments, got " + args.size()
-                );
-            }
-            
-            int start, stop, step;
-            
-            if (args.size() == 1) {
-                start = 0;
-                stop = toInt(args.get(0));
-                step = 1;
-            } else if (args.size() == 2) {
-                start = toInt(args.get(0));
-                stop = toInt(args.get(1));
-                step = 1;
-            } else {
-                start = toInt(args.get(0));
-                stop = toInt(args.get(1));
-                step = toInt(args.get(2));
-                
-                if (step == 0) {
-                    throw new GrizzlyExecutionException("range() step cannot be zero");
-                }
-            }
-            
-            List<Value> result = new ArrayList<>();
-            
-            if (step > 0) {
-                for (int i = start; i < stop; i += step) {
-                    result.add(NumberValue.of(i));
-                }
-            } else {
-                for (int i = start; i > stop; i += step) {
-                    result.add(NumberValue.of(i));
-                }
-            }
-            
-            return new ListValue(result);
-        });
-        
-        // now() function
-        builtinFunctions.put("now", (args) -> {
-            if (args.size() > 1) {
-                throw new GrizzlyExecutionException(
-                    "now() takes 0 or 1 argument (optional timezone), got " + args.size()
-                );
-            }
-            
-            if (args.isEmpty()) {
-                return new DateTimeValue(java.time.ZonedDateTime.now());
-            } else {
-                String timezone = asString(args.get(0));
-                try {
-                    java.time.ZoneId zone = java.time.ZoneId.of(timezone);
-                    return new DateTimeValue(java.time.ZonedDateTime.now(zone));
-                } catch (Exception e) {
-                    throw new GrizzlyExecutionException(
-                        "Invalid timezone: " + timezone + ". Use formats like 'UTC', 'America/New_York', 'Asia/Tokyo'"
-                    );
-                }
-            }
-        });
-        
-        // parseDate() function
-        builtinFunctions.put("parseDate", (args) -> {
-            if (args.size() != 2 && args.size() != 3) {
-                throw new GrizzlyExecutionException(
-                    "parseDate() requires 2 or 3 arguments: (dateString, format, [timezone])"
-                );
-            }
-            
-            String dateString = asString(args.get(0));
-            String format = asString(args.get(1));
-            
-            try {
-                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern(format);
-                
-                if (args.size() == 3) {
-                    String timezone = asString(args.get(2));
-                    java.time.ZoneId zone = java.time.ZoneId.of(timezone);
-                    
-                    try {
-                        java.time.ZonedDateTime parsed = java.time.ZonedDateTime.parse(dateString, formatter.withZone(zone));
-                        return new DateTimeValue(parsed);
-                    } catch (Exception e1) {
-                        try {
-                            java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
-                            return new DateTimeValue(local.atZone(zone));
-                        } catch (Exception e2) {
-                            java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
-                            return new DateTimeValue(date.atStartOfDay(zone));
-                        }
-                    }
-                } else {
-                    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-                    
-                    try {
-                        java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
-                        return new DateTimeValue(local.atZone(zone));
-                    } catch (Exception e) {
-                        java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
-                        return new DateTimeValue(date.atStartOfDay(zone));
-                    }
-                }
-            } catch (Exception e) {
-                throw new GrizzlyExecutionException(
-                    "Failed to parse date '" + dateString + "' with format '" + format + "': " + e.getMessage()
-                );
-            }
-        });
-        
-        // formatDate() function
-        builtinFunctions.put("formatDate", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "formatDate() requires 2 arguments: (datetime, format)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "formatDate() first argument must be a datetime, got: " + args.get(0).typeName()
-                );
-            }
-            
-            String format = asString(args.get(1));
-            
-            try {
-                return new StringValue(dt.format(format));
-            } catch (Exception e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid date format '" + format + "': " + e.getMessage()
-                );
-            }
-        });
-        
-        // addDays() function
-        builtinFunctions.put("addDays", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "addDays() requires 2 arguments: (datetime, days)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "addDays() first argument must be a datetime"
-                );
-            }
-            
-            long days = toLong(args.get(1));
-            return dt.addDays(days);
-        });
-        
-        // addMonths() function
-        builtinFunctions.put("addMonths", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "addMonths() requires 2 arguments: (datetime, months)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "addMonths() first argument must be a datetime"
-                );
-            }
-            
-            long months = toLong(args.get(1));
-            return dt.addMonths(months);
-        });
-        
-        // addYears() function
-        builtinFunctions.put("addYears", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "addYears() requires 2 arguments: (datetime, years)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "addYears() first argument must be a datetime"
-                );
-            }
-            
-            long years = toLong(args.get(1));
-            return dt.addYears(years);
-        });
-        
-        // addHours() function
-        builtinFunctions.put("addHours", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "addHours() requires 2 arguments: (datetime, hours)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "addHours() first argument must be a datetime"
-                );
-            }
-            
-            long hours = toLong(args.get(1));
-            return dt.addHours(hours);
-        });
-        
-        // addMinutes() function
-        builtinFunctions.put("addMinutes", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "addMinutes() requires 2 arguments: (datetime, minutes)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DateTimeValue dt)) {
-                throw new GrizzlyExecutionException(
-                    "addMinutes() first argument must be a datetime"
-                );
-            }
-            
-            long minutes = toLong(args.get(1));
-            return dt.addMinutes(minutes);
-        });
-        
-        // Decimal() function
-        builtinFunctions.put("Decimal", (args) -> {
-            if (args.size() != 1) {
-                throw new GrizzlyExecutionException(
-                    "Decimal() requires exactly 1 argument: Decimal(\"123.45\")"
-                );
-            }
-            
-            Value value = args.get(0);
-            
-            return switch (value) {
-                case StringValue s -> new DecimalValue(s.value());
-                case NumberValue n -> {
-                    if (n.isInteger()) {
-                        yield new DecimalValue(n.asInt());
-                    }
-                    yield new DecimalValue(String.valueOf(n.asDouble()));
-                }
-                default -> throw new GrizzlyExecutionException(
-                    "Decimal() argument must be a string or number, got: " + value.typeName()
-                );
-            };
-        });
-        
-        // round() function
-        builtinFunctions.put("round", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "round() requires 2 arguments: round(decimal, places)"
-                );
-            }
-            
-            if (!(args.get(0) instanceof DecimalValue decimal)) {
-                throw new GrizzlyExecutionException(
-                    "round() first argument must be a Decimal, got: " + args.get(0).typeName()
-                );
-            }
-            
-            int places = toInt(args.get(1));
-            return decimal.round(places);
-        });
-        
-        // str() function
-        builtinFunctions.put("str", (args) -> {
-            if (args.size() != 1) {
-                throw new GrizzlyExecutionException(
-                    "str() requires exactly 1 argument: str(value)"
-                );
-            }
-            
-            Value value = args.get(0);
-            
-            return switch (value) {
-                case NullValue ignored -> new StringValue("None");
-                case BoolValue b -> new StringValue(b.value() ? "True" : "False");
-                default -> new StringValue(value.toString());
-            };
-        });
+    // ==================== Safeguard Checks ====================
+    
+    private void checkTimeout() {
+        long elapsed = System.currentTimeMillis() - executionStartTime;
+        if (elapsed > config.executionTimeout().toMillis()) {
+            throw new GrizzlyExecutionException(
+                "Execution timeout exceeded (" + config.executionTimeout().toSeconds() + "s)"
+            );
+        }
     }
     
-    /**
-     * Register module functions (re, etc.)
-     */
-    private void registerModules() {
-        Map<String, BuiltinFunction> reModule = new HashMap<>();
-        
-        // re.match()
-        reModule.put("match", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "re.match() requires 2 arguments: re.match(pattern, text)"
-                );
-            }
-            
-            String pattern = asString(args.get(0));
-            String text = asString(args.get(1));
-            
-            try {
-                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
-                java.util.regex.Matcher m = p.matcher(text);
-                
-                if (m.matches()) {
-                    DictValue match = DictValue.empty();
-                    match.put("matched", BoolValue.TRUE);
-                    match.put("value", new StringValue(text));
-                    return match;
-                }
-                return NullValue.INSTANCE;
-            } catch (java.util.regex.PatternSyntaxException e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
-                );
-            }
-        });
-        
-        // re.search()
-        reModule.put("search", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "re.search() requires 2 arguments: re.search(pattern, text)"
-                );
-            }
-            
-            String pattern = asString(args.get(0));
-            String text = asString(args.get(1));
-            
-            try {
-                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
-                java.util.regex.Matcher m = p.matcher(text);
-                
-                if (m.find()) {
-                    DictValue match = DictValue.empty();
-                    match.put("matched", BoolValue.TRUE);
-                    match.put("value", new StringValue(m.group()));
-                    match.put("start", NumberValue.of(m.start()));
-                    match.put("end", NumberValue.of(m.end()));
-                    return match;
-                }
-                return NullValue.INSTANCE;
-            } catch (java.util.regex.PatternSyntaxException e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
-                );
-            }
-        });
-        
-        // re.findall()
-        reModule.put("findall", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "re.findall() requires 2 arguments: re.findall(pattern, text)"
-                );
-            }
-            
-            String pattern = asString(args.get(0));
-            String text = asString(args.get(1));
-            List<Value> matches = new ArrayList<>();
-            
-            try {
-                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
-                java.util.regex.Matcher m = p.matcher(text);
-                
-                while (m.find()) {
-                    matches.add(new StringValue(m.group()));
-                }
-                
-                return new ListValue(matches);
-            } catch (java.util.regex.PatternSyntaxException e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
-                );
-            }
-        });
-        
-        // re.sub()
-        reModule.put("sub", (args) -> {
-            if (args.size() != 3) {
-                throw new GrizzlyExecutionException(
-                    "re.sub() requires 3 arguments: re.sub(pattern, replacement, text)"
-                );
-            }
-            
-            String pattern = asString(args.get(0));
-            String replacement = asString(args.get(1));
-            String text = asString(args.get(2));
-            
-            try {
-                return new StringValue(text.replaceAll(pattern, replacement));
-            } catch (java.util.regex.PatternSyntaxException e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
-                );
-            }
-        });
-        
-        // re.split()
-        reModule.put("split", (args) -> {
-            if (args.size() != 2) {
-                throw new GrizzlyExecutionException(
-                    "re.split() requires 2 arguments: re.split(pattern, text)"
-                );
-            }
-            
-            String pattern = asString(args.get(0));
-            String text = asString(args.get(1));
-            
-            try {
-                String[] parts = text.split(pattern);
-                List<Value> result = new ArrayList<>();
-                for (String part : parts) {
-                    result.add(new StringValue(part));
-                }
-                return new ListValue(result);
-            } catch (java.util.regex.PatternSyntaxException e) {
-                throw new GrizzlyExecutionException(
-                    "Invalid regex pattern: " + pattern + " - " + e.getMessage()
-                );
-            }
-        });
-        
-        modules.put("re", reModule);
+    private void checkRecursionDepth() {
+        if (currentRecursionDepth > config.maxRecursionDepth()) {
+            throw new GrizzlyExecutionException(
+                "Maximum recursion depth exceeded (" + config.maxRecursionDepth() + ")"
+            );
+        }
     }
+    
+    // ==================== Execution Methods ====================
     
     private Value executeFunction(FunctionDef function, ExecutionContext context) {
-        for (Statement stmt : function.body()) {
-            Value result = executeStatement(stmt, context);
-            
-            if (stmt instanceof ReturnStatement) {
-                return result;
-            }
-        }
+        currentRecursionDepth++;
+        checkRecursionDepth();
+        checkTimeout();
         
-        return NullValue.INSTANCE;
+        try {
+            for (Statement stmt : function.body()) {
+                Value result = executeStatement(stmt, context);
+                
+                if (stmt instanceof ReturnStatement) {
+                    return result;
+                }
+            }
+            
+            return NullValue.INSTANCE;
+        } finally {
+            currentRecursionDepth--;
+        }
     }
     
     private Value executeStatement(Statement stmt, ExecutionContext context) {
         return switch (stmt) {
             case ImportStatement i -> {
-                if (!modules.containsKey(i.moduleName())) {
+                if (!modules.containsModule(i.moduleName())) {
                     throw new GrizzlyExecutionException(
                         "Unknown module: " + i.moduleName(),
                         i.lineNumber()
@@ -576,12 +162,12 @@ public class GrizzlyInterpreter {
     
     private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
-            if (builtinFunctions.containsKey(call.functionName())) {
+            if (builtins.contains(call.functionName())) {
                 List<Value> args = new ArrayList<>();
                 for (Expression argExpr : call.args()) {
                     args.add(evaluateExpression(argExpr, context));
                 }
-                return builtinFunctions.get(call.functionName()).apply(args);
+                return builtins.get(call.functionName()).apply(args);
             }
             
             FunctionDef func = program.findFunction(call.functionName());
@@ -678,7 +264,22 @@ public class GrizzlyInterpreter {
                 );
             }
             
+            int iterations = 0;
             itemLoop: for (Value item : list) {
+                // Check loop iteration limit
+                iterations++;
+                if (iterations > config.maxLoopIterations()) {
+                    throw new GrizzlyExecutionException(
+                        "Maximum loop iterations exceeded (" + config.maxLoopIterations() + ") at line " + forLoop.lineNumber(),
+                        forLoop.lineNumber()
+                    );
+                }
+                
+                // Check timeout periodically (every 1000 iterations)
+                if (iterations % 1000 == 0) {
+                    checkTimeout();
+                }
+                
                 context.set(forLoop.variable(), item);
                 
                 for (Statement stmt : forLoop.body()) {
@@ -796,7 +397,35 @@ public class GrizzlyInterpreter {
             case "==" -> BoolValue.of(evaluateEquality(left, right, true));
             case "!=" -> BoolValue.of(evaluateEquality(left, right, false));
             case "<", ">", "<=", ">=" -> BoolValue.of(evaluateComparison(left, right, operator));
+            case "and" -> left.isTruthy() ? right : left;
+            case "or" -> left.isTruthy() ? left : right;
+            case "in" -> BoolValue.of(evaluateIn(left, right));
+            case "not in" -> BoolValue.of(!evaluateIn(left, right));
             default -> throw new GrizzlyExecutionException("Unknown operator: " + operator);
+        };
+    }
+    
+    private boolean evaluateIn(Value left, Value right) {
+        return switch (right) {
+            case ListValue list -> {
+                for (Value item : list.items()) {
+                    if (evaluateEquality(left, item, true)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            case DictValue dict -> {
+                String key = asString(left);
+                yield dict.containsKey(key);
+            }
+            case StringValue str -> {
+                String needle = asString(left);
+                yield str.value().contains(needle);
+            }
+            default -> throw new GrizzlyExecutionException(
+                "Cannot use 'in' operator with " + right.typeName()
+            );
         };
     }
     
@@ -898,8 +527,8 @@ public class GrizzlyInterpreter {
             String moduleName = id.name();
             String methodName = methodCall.methodName();
             
-            if (modules.containsKey(moduleName)) {
-                Map<String, BuiltinFunction> module = modules.get(moduleName);
+            if (modules.containsModule(moduleName)) {
+                Map<String, BuiltinFunction> module = modules.getModule(moduleName);
                 if (module.containsKey(methodName)) {
                     List<Value> args = new ArrayList<>();
                     for (Expression argExpr : methodCall.arguments()) {
@@ -924,43 +553,11 @@ public class GrizzlyInterpreter {
         }
         
         if (obj instanceof ListValue list) {
-            return switch (methodName) {
-                case "append" -> {
-                    if (methodCall.arguments().size() != 1) {
-                        throw new GrizzlyExecutionException(
-                            "append() takes exactly 1 argument, got " + methodCall.arguments().size()
-                        );
-                    }
-                    Value value = evaluateExpression(methodCall.arguments().get(0), context);
-                    list.append(value);
-                    yield NullValue.INSTANCE;
-                }
-                
-                case "extend" -> {
-                    if (methodCall.arguments().size() != 1) {
-                        throw new GrizzlyExecutionException(
-                            "extend() takes exactly 1 argument, got " + methodCall.arguments().size()
-                        );
-                    }
-                    Value value = evaluateExpression(methodCall.arguments().get(0), context);
-                    if (!(value instanceof ListValue other)) {
-                        throw new GrizzlyExecutionException("extend() argument must be a list");
-                    }
-                    list.extend(other);
-                    yield NullValue.INSTANCE;
-                }
-                
-                default -> throw new GrizzlyExecutionException("Unknown list method: " + methodName);
-            };
+            return evaluateListMethod(list, methodName, methodCall.arguments(), context);
         }
         
         if (obj instanceof StringValue str) {
-            return switch (methodName) {
-                case "upper" -> new StringValue(str.value().toUpperCase());
-                case "lower" -> new StringValue(str.value().toLowerCase());
-                case "strip" -> new StringValue(str.value().strip());
-                default -> throw new GrizzlyExecutionException("Unknown string method: " + methodName);
-            };
+            return evaluateStringMethod(str, methodName, methodCall.arguments(), context);
         }
         
         throw new GrizzlyExecutionException(
@@ -968,13 +565,241 @@ public class GrizzlyInterpreter {
         );
     }
     
+    private Value evaluateListMethod(ListValue list, String methodName, 
+                                     List<Expression> arguments, ExecutionContext context) {
+        return switch (methodName) {
+            case "append" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException(
+                        "append() takes exactly 1 argument, got " + arguments.size()
+                    );
+                }
+                Value value = evaluateExpression(arguments.get(0), context);
+                list.append(value);
+                yield NullValue.INSTANCE;
+            }
+            
+            case "extend" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException(
+                        "extend() takes exactly 1 argument, got " + arguments.size()
+                    );
+                }
+                Value value = evaluateExpression(arguments.get(0), context);
+                if (!(value instanceof ListValue other)) {
+                    throw new GrizzlyExecutionException("extend() argument must be a list");
+                }
+                list.extend(other);
+                yield NullValue.INSTANCE;
+            }
+            
+            case "pop" -> {
+                if (list.isEmpty()) {
+                    throw new GrizzlyExecutionException("pop from empty list");
+                }
+                if (arguments.isEmpty()) {
+                    yield list.items().remove(list.size() - 1);
+                } else {
+                    int index = toInt(evaluateExpression(arguments.get(0), context));
+                    if (index < 0) index = list.size() + index;
+                    if (index < 0 || index >= list.size()) {
+                        throw new GrizzlyExecutionException("pop index out of range");
+                    }
+                    yield list.items().remove(index);
+                }
+            }
+            
+            case "insert" -> {
+                if (arguments.size() != 2) {
+                    throw new GrizzlyExecutionException(
+                        "insert() takes exactly 2 arguments, got " + arguments.size()
+                    );
+                }
+                int index = toInt(evaluateExpression(arguments.get(0), context));
+                Value value = evaluateExpression(arguments.get(1), context);
+                if (index < 0) index = Math.max(0, list.size() + index);
+                if (index > list.size()) index = list.size();
+                list.items().add(index, value);
+                yield NullValue.INSTANCE;
+            }
+            
+            case "reverse" -> {
+                java.util.Collections.reverse(list.items());
+                yield NullValue.INSTANCE;
+            }
+            
+            case "sort" -> {
+                list.items().sort((a, b) -> {
+                    if (a instanceof NumberValue na && b instanceof NumberValue nb) {
+                        return Double.compare(na.asDouble(), nb.asDouble());
+                    }
+                    return asString(a).compareTo(asString(b));
+                });
+                yield NullValue.INSTANCE;
+            }
+            
+            case "index" -> {
+                if (arguments.isEmpty()) {
+                    throw new GrizzlyExecutionException("index() requires at least 1 argument");
+                }
+                Value needle = evaluateExpression(arguments.get(0), context);
+                for (int i = 0; i < list.size(); i++) {
+                    if (evaluateEquality(list.get(i), needle, true)) {
+                        yield NumberValue.of(i);
+                    }
+                }
+                throw new GrizzlyExecutionException("Value not found in list");
+            }
+            
+            case "count" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("count() takes exactly 1 argument");
+                }
+                Value needle = evaluateExpression(arguments.get(0), context);
+                int count = 0;
+                for (Value item : list.items()) {
+                    if (evaluateEquality(item, needle, true)) {
+                        count++;
+                    }
+                }
+                yield NumberValue.of(count);
+            }
+            
+            default -> throw new GrizzlyExecutionException("Unknown list method: " + methodName);
+        };
+    }
+    
+    private Value evaluateStringMethod(StringValue str, String methodName,
+                                       List<Expression> arguments, ExecutionContext context) {
+        return switch (methodName) {
+            case "upper" -> new StringValue(str.value().toUpperCase());
+            case "lower" -> new StringValue(str.value().toLowerCase());
+            case "strip" -> new StringValue(str.value().strip());
+            case "lstrip" -> new StringValue(str.value().stripLeading());
+            case "rstrip" -> new StringValue(str.value().stripTrailing());
+            
+            case "split" -> {
+                String sep = arguments.isEmpty() 
+                    ? null 
+                    : asString(evaluateExpression(arguments.get(0), context));
+                
+                String[] parts = sep == null 
+                    ? str.value().split("\\s+")
+                    : str.value().split(java.util.regex.Pattern.quote(sep), -1);
+                
+                List<Value> result = new ArrayList<>();
+                for (String part : parts) {
+                    if (sep != null || !part.isEmpty()) {
+                        result.add(new StringValue(part));
+                    }
+                }
+                yield new ListValue(result);
+            }
+            
+            case "join" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("join() takes exactly 1 argument");
+                }
+                Value arg = evaluateExpression(arguments.get(0), context);
+                if (!(arg instanceof ListValue list)) {
+                    throw new GrizzlyExecutionException("join() argument must be a list");
+                }
+                StringBuilder sb = new StringBuilder();
+                boolean first = true;
+                for (Value item : list.items()) {
+                    if (!first) sb.append(str.value());
+                    sb.append(asString(item));
+                    first = false;
+                }
+                yield new StringValue(sb.toString());
+            }
+            
+            case "replace" -> {
+                if (arguments.size() != 2) {
+                    throw new GrizzlyExecutionException("replace() takes exactly 2 arguments");
+                }
+                String old = asString(evaluateExpression(arguments.get(0), context));
+                String replacement = asString(evaluateExpression(arguments.get(1), context));
+                yield new StringValue(str.value().replace(old, replacement));
+            }
+            
+            case "startswith" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("startswith() takes exactly 1 argument");
+                }
+                String prefix = asString(evaluateExpression(arguments.get(0), context));
+                yield BoolValue.of(str.value().startsWith(prefix));
+            }
+            
+            case "endswith" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("endswith() takes exactly 1 argument");
+                }
+                String suffix = asString(evaluateExpression(arguments.get(0), context));
+                yield BoolValue.of(str.value().endsWith(suffix));
+            }
+            
+            case "contains" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("contains() takes exactly 1 argument");
+                }
+                String substr = asString(evaluateExpression(arguments.get(0), context));
+                yield BoolValue.of(str.value().contains(substr));
+            }
+            
+            case "find" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("find() takes exactly 1 argument");
+                }
+                String substr = asString(evaluateExpression(arguments.get(0), context));
+                yield NumberValue.of(str.value().indexOf(substr));
+            }
+            
+            case "count" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("count() takes exactly 1 argument");
+                }
+                String substr = asString(evaluateExpression(arguments.get(0), context));
+                int count = 0;
+                int idx = 0;
+                while ((idx = str.value().indexOf(substr, idx)) != -1) {
+                    count++;
+                    idx += substr.length();
+                }
+                yield NumberValue.of(count);
+            }
+            
+            case "isdigit" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isDigit));
+            case "isalpha" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isLetter));
+            case "isalnum" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isLetterOrDigit));
+            case "isspace" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isWhitespace));
+            
+            case "zfill" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("zfill() takes exactly 1 argument");
+                }
+                int width = toInt(evaluateExpression(arguments.get(0), context));
+                String s = str.value();
+                if (s.length() >= width) {
+                    yield str;
+                }
+                boolean negative = s.startsWith("-");
+                String digits = negative ? s.substring(1) : s;
+                String padded = "0".repeat(width - s.length()) + digits;
+                yield new StringValue(negative ? "-" + padded : padded);
+            }
+            
+            default -> throw new GrizzlyExecutionException("Unknown string method: " + methodName);
+        };
+    }
+    
     private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
-        if (builtinFunctions.containsKey(funcCall.functionName())) {
+        if (builtins.contains(funcCall.functionName())) {
             List<Value> args = new ArrayList<>();
             for (Expression argExpr : funcCall.args()) {
                 args.add(evaluateExpression(argExpr, context));
             }
-            return builtinFunctions.get(funcCall.functionName()).apply(args);
+            return builtins.get(funcCall.functionName()).apply(args);
         }
         
         FunctionDef func = program.findFunction(funcCall.functionName());
@@ -1149,9 +974,5 @@ public class GrizzlyInterpreter {
     
     private int toInt(Value value) {
         return (int) toDouble(value);
-    }
-    
-    private long toLong(Value value) {
-        return (long) toDouble(value);
     }
 }
