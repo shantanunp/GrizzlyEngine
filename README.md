@@ -66,6 +66,11 @@ String output = template.transform(input);
 
 GrizzlyEngine extends Python syntax with safe navigation operators (`?.` and `?[`) to handle null values gracefully in nested data structures.
 
+### Test Cases for Safe Navigation, Null Handling & Access Tracking
+```text
+SafeNavigationTest, ValidationReportTest, AccessTrackerTest, GrizzlyLexerTest
+```
+
 ### Problem: Null in Deep Property Chains
 
 ```python
