@@ -1,0 +1,13 @@
+{
+    "aboutVersions":{
+        "abountVersion":[
+            {
+                "version":"1.0.0",
+                "description":"Initial release",
+                "createDatetime":{
+                    "datetime":"2026-03-01T11:35:10.185Z"
+                }
+            }
+        ]
+    }
+}

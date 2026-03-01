@@ -136,4 +136,31 @@ class GrizzlyLexerTest {
         assertThat(tokens).extracting(Token::type)
             .contains(TokenType.SAFE_DOT, TokenType.SAFE_LBRACKET);
     }
+    
+    @Test
+    void shouldHandleWindowsCrLfLineEndings() {
+        // Windows-style \r\n line endings
+        String code = "def transform(INPUT):\r\n    OUTPUT = {}\r\n    return OUTPUT";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).isNotEmpty();
+        assertThat(tokens.get(0).type()).isEqualTo(TokenType.DEF);
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.IDENTIFIER))
+            .anyMatch(t -> "transform".equals(t.value()));
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.NEWLINE)).isNotEmpty();
+    }
+    
+    @Test
+    void shouldHandleLegacyMacCrLineEndings() {
+        // Old Mac-style \r only
+        String code = "x = 1\r y = 2";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).isNotEmpty();
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.NEWLINE)).hasSize(1);
+    }
 }

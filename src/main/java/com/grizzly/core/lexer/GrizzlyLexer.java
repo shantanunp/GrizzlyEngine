@@ -388,6 +388,13 @@ public class GrizzlyLexer {
             handleIndentation();
         } else if (c == '\n') {
             handleNewline();
+        } else if (c == '\r') {
+            // Windows (CRLF) and old Mac (CR) line endings: treat as single newline
+            advance();
+            if (!isAtEnd() && currentChar() == '\n') {
+                advance();
+            }
+            handleNewline();
         } else if (c == '#') {
             skipComment();
         } else if (isQuote(c)) {
