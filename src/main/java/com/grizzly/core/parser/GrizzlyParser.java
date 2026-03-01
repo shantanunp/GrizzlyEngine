@@ -422,14 +422,8 @@ public class GrizzlyParser {
             }
         }
         
-        // Try to parse as expression (might be assignment or method call)
+        // Try to parse as expression (assignment, method call, or expression statement)
         Expression expr = parseExpression();
-        
-        // Check if it's a method call expression (like list.append())
-        if (expr instanceof MethodCall) {
-            // Wrap it in an ExpressionStatement
-            return new ExpressionStatement(expr, lineNumber);
-        }
         
         // Check if it's an assignment
         if (peek().type() == TokenType.ASSIGN) {
@@ -438,7 +432,8 @@ public class GrizzlyParser {
             return new Assignment(expr, value, lineNumber);
         }
         
-        throw new GrizzlyParseException("Expected statement at line " + lineNumber);
+        // Any other expression is a valid statement (e.g. docstrings, bare expressions)
+        return new ExpressionStatement(expr, lineNumber);
     }
     
     /**
@@ -1062,20 +1057,20 @@ public class GrizzlyParser {
      */
     private ListLiteral parseListLiteral() {
         expect(TokenType.LBRACKET, "Expected '['");
+        skipNewlinesAndIndentDedent();
         
         List<Expression> elements = new ArrayList<>();
         
-        if (peek().type() != TokenType.RBRACKET) {
-            do {
-                elements.add(parseExpression());
-                if (peek().type() == TokenType.COMMA) {
-                    advance();
-                }
-            } while (peek().type() != TokenType.RBRACKET);
+        while (peek().type() != TokenType.RBRACKET) {
+            skipNewlinesAndIndentDedent();
+            elements.add(parseExpression());
+            skipNewlinesAndIndentDedent();
+            if (peek().type() == TokenType.COMMA) {
+                advance();
+            }
         }
         
         expect(TokenType.RBRACKET, "Expected ']'");
-        
         return new ListLiteral(elements);
     }
     
@@ -1084,24 +1079,23 @@ public class GrizzlyParser {
      */
     private DictLiteral parseDictLiteral() {
         expect(TokenType.LBRACE, "Expected '{'");
+        skipNewlinesAndIndentDedent();
         
         List<DictLiteral.Entry> entries = new ArrayList<>();
         
-        if (peek().type() != TokenType.RBRACE) {
-            do {
-                Expression key = parseExpression();
-                expect(TokenType.COLON, "Expected ':' after dict key");
-                Expression value = parseExpression();
-                entries.add(new DictLiteral.Entry(key, value));
-                
-                if (peek().type() == TokenType.COMMA) {
-                    advance();
-                }
-            } while (peek().type() != TokenType.RBRACE);
+        while (peek().type() != TokenType.RBRACE) {
+            skipNewlinesAndIndentDedent();
+            Expression key = parseExpression();
+            expect(TokenType.COLON, "Expected ':' after dict key");
+            Expression value = parseExpression();
+            entries.add(new DictLiteral.Entry(key, value));
+            skipNewlinesAndIndentDedent();
+            if (peek().type() == TokenType.COMMA) {
+                advance();
+            }
         }
         
         expect(TokenType.RBRACE, "Expected '}'");
-        
         return new DictLiteral(entries);
     }
     
@@ -1145,6 +1139,21 @@ public class GrizzlyParser {
     private void skipNewlines() {
         while (!isAtEnd() && peek().type() == TokenType.NEWLINE) {
             advance();
+        }
+    }
+    
+    /**
+     * Skip NEWLINE, INDENT, and DEDENT tokens. Used inside multi-line dict/list literals
+     * so that newlines and indentation between elements do not cause parse errors.
+     */
+    private void skipNewlinesAndIndentDedent() {
+        while (!isAtEnd()) {
+            TokenType t = peek().type();
+            if (t == TokenType.NEWLINE || t == TokenType.INDENT || t == TokenType.DEDENT) {
+                advance();
+            } else {
+                break;
+            }
         }
     }
 }
