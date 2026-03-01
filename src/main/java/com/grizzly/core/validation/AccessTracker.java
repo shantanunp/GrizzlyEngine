@@ -68,7 +68,9 @@ public class AccessTracker {
     
     /**
      * Record a broken path (null encountered in chain).
-     * 
+     * Only records the first null in a chain; downstream nulls (e.g. .address.city after .loan was null)
+     * are not recorded to avoid duplicate noise.
+     *
      * @param path         Full path that was attempted
      * @param brokenAt     Segment where null was encountered
      * @param lineNumber   Source line number
@@ -76,9 +78,29 @@ public class AccessTracker {
      */
     public void recordPathBroken(String path, String brokenAt, int lineNumber, boolean expectedNull) {
         if (!enabled) return;
+        if (isDownstreamOfExistingPathError(brokenAt)) return;
         
         AccessStatus status = expectedNull ? AccessStatus.EXPECTED_NULL : AccessStatus.PATH_BROKEN;
         records.add(new AccessRecord(path, status, brokenAt, null, lineNumber, expectedNull));
+    }
+    
+    /**
+     * True if the given path is the same as or extends a path already recorded as PATH_BROKEN or EXPECTED_NULL.
+     * Used to avoid recording multiple errors for the same logical null chain.
+     */
+    boolean isDownstreamOfExistingPathError(String path) {
+        if (path == null || path.isEmpty()) return false;
+        for (AccessRecord r : records) {
+            if (r.status() != AccessStatus.PATH_BROKEN && r.status() != AccessStatus.EXPECTED_NULL) continue;
+            String existing = r.fullPath();
+            if (existing == null) continue;
+            if (path.equals(existing)) return true;
+            if (path.startsWith(existing) && existing.length() < path.length()) {
+                char next = path.charAt(existing.length());
+                if (next == '.' || next == '[') return true;
+            }
+        }
+        return false;
     }
     
     /**

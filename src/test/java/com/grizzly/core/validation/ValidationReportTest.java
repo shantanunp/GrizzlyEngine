@@ -44,6 +44,9 @@ class ValidationReportTest {
             AccessRecord error = pathErrors.get(0);
             assertThat(error.status()).isEqualTo(AccessStatus.PATH_BROKEN);
             assertThat(error.fullPath()).contains("loan");
+            assertThat(error.brokenAtSegment()).isEqualTo("INPUT.deal.loan");
+            // Only the first null in the chain is recorded (not .address or .city)
+            assertThat(pathErrors).hasSize(1);
         }
         
         @Test
