@@ -159,60 +159,69 @@ public class GrizzlyLogger {
         String prefix = basePrefix + connector;
         String childPrefix = basePrefix + (isLast ? "    " : "│   ");
         
-        switch (stmt) {
-            case Assignment a -> 
-                debug("PARSER", prefix + "Assignment: " + formatExpression(a.target()) + 
-                    " = " + formatExpression(a.value()));
-            case ReturnStatement r -> 
-                debug("PARSER", prefix + "Return: " + formatExpression(r.value()));
-            case IfStatement i -> {
-                debug("PARSER", prefix + "If: " + formatExpression(i.condition()));
-                for (int j = 0; j < i.thenBlock().size(); j++) {
-                    logStatement(i.thenBlock().get(j), childPrefix, 
-                        j == i.thenBlock().size() - 1 && i.elseBlock() == null, depth + 1);
-                }
-                if (i.elseBlock() != null) {
-                    debug("PARSER", childPrefix + "Else:");
-                    for (int j = 0; j < i.elseBlock().size(); j++) {
-                        logStatement(i.elseBlock().get(j), childPrefix + "    ", 
-                            j == i.elseBlock().size() - 1, depth + 1);
-                    }
+        if (stmt instanceof Assignment a) {
+            debug("PARSER", prefix + "Assignment: " + formatExpression(a.target()) + 
+                " = " + formatExpression(a.value()));
+        } else if (stmt instanceof ReturnStatement r) {
+            debug("PARSER", prefix + "Return: " + formatExpression(r.value()));
+        } else if (stmt instanceof IfStatement i) {
+            debug("PARSER", prefix + "If: " + formatExpression(i.condition()));
+            for (int j = 0; j < i.thenBlock().size(); j++) {
+                logStatement(i.thenBlock().get(j), childPrefix, 
+                    j == i.thenBlock().size() - 1 && i.elseBlock() == null, depth + 1);
+            }
+            if (i.elseBlock() != null) {
+                debug("PARSER", childPrefix + "Else:");
+                for (int j = 0; j < i.elseBlock().size(); j++) {
+                    logStatement(i.elseBlock().get(j), childPrefix + "    ", 
+                        j == i.elseBlock().size() - 1, depth + 1);
                 }
             }
-            case ForLoop f -> {
-                debug("PARSER", prefix + "For: " + f.variable() + " in " + 
-                    formatExpression(f.iterable()));
-                for (int j = 0; j < f.body().size(); j++) {
-                    logStatement(f.body().get(j), childPrefix, 
-                        j == f.body().size() - 1, depth + 1);
-                }
+        } else if (stmt instanceof ForLoop f) {
+            debug("PARSER", prefix + "For: " + f.variable() + " in " + 
+                formatExpression(f.iterable()));
+            for (int j = 0; j < f.body().size(); j++) {
+                logStatement(f.body().get(j), childPrefix, 
+                    j == f.body().size() - 1, depth + 1);
             }
-            case FunctionCall fc -> 
-                debug("PARSER", prefix + "FunctionCall: " + fc.functionName() + "(...)");
-            case ExpressionStatement e -> 
-                debug("PARSER", prefix + "Expression: " + formatExpression(e.expression()));
-            default -> 
-                debug("PARSER", prefix + stmt.getClass().getSimpleName());
+        } else if (stmt instanceof FunctionCall fc) {
+            debug("PARSER", prefix + "FunctionCall: " + fc.functionName() + "(...)");
+        } else if (stmt instanceof ExpressionStatement e) {
+            debug("PARSER", prefix + "Expression: " + formatExpression(e.expression()));
+        } else {
+            debug("PARSER", prefix + stmt.getClass().getSimpleName());
         }
     }
     
     public static String formatExpression(Expression expr) {
-        return switch (expr) {
-            case Identifier id -> id.name();
-            case StringLiteral s -> "\"" + truncate(s.value(), 15) + "\"";
-            case NumberLiteral n -> String.valueOf(n.value());
-            case BooleanLiteral b -> b.value() ? "True" : "False";
-            case NullLiteral ignored -> "None";
-            case DictLiteral d -> "{" + d.entries().size() + " entries}";
-            case ListLiteral l -> "[" + l.elements().size() + " elements]";
-            case AttrAccess a -> formatExpression(a.object()) + "." + a.attr();
-            case DictAccess d -> formatExpression(d.object()) + "[" + formatExpression(d.key()) + "]";
-            case MethodCall m -> formatExpression(m.object()) + "." + m.methodName() + "(...)";
-            case BinaryOp b -> formatExpression(b.left()) + " " + b.operator() + " " + 
+        if (expr instanceof Identifier id) {
+            return id.name();
+        } else if (expr instanceof StringLiteral s) {
+            return "\"" + truncate(s.value(), 15) + "\"";
+        } else if (expr instanceof NumberLiteral n) {
+            return String.valueOf(n.value());
+        } else if (expr instanceof BooleanLiteral b) {
+            return b.value() ? "True" : "False";
+        } else if (expr instanceof NullLiteral) {
+            return "None";
+        } else if (expr instanceof DictLiteral d) {
+            return "{" + d.entries().size() + " entries}";
+        } else if (expr instanceof ListLiteral l) {
+            return "[" + l.elements().size() + " elements]";
+        } else if (expr instanceof AttrAccess a) {
+            return formatExpression(a.object()) + "." + a.attr();
+        } else if (expr instanceof DictAccess d) {
+            return formatExpression(d.object()) + "[" + formatExpression(d.key()) + "]";
+        } else if (expr instanceof MethodCall m) {
+            return formatExpression(m.object()) + "." + m.methodName() + "(...)";
+        } else if (expr instanceof BinaryOp b) {
+            return formatExpression(b.left()) + " " + b.operator() + " " + 
                 formatExpression(b.right());
-            case FunctionCallExpression f -> f.functionName() + "(...)";
-            default -> expr.getClass().getSimpleName();
-        };
+        } else if (expr instanceof FunctionCallExpression f) {
+            return f.functionName() + "(...)";
+        } else {
+            return expr.getClass().getSimpleName();
+        }
     }
     
     // ==================== Interpreter Logging ====================
@@ -244,15 +253,21 @@ public class GrizzlyLogger {
     }
     
     public static String formatValue(Value value) {
-        return switch (value) {
-            case StringValue s -> "\"" + truncate(s.value(), 30) + "\"";
-            case NumberValue n -> n.toString();
-            case BoolValue b -> b.value() ? "True" : "False";
-            case NullValue ignored -> "None";
-            case ListValue l -> "list[" + l.size() + "]";
-            case DictValue d -> "dict{" + d.size() + " keys}";
-            default -> value.typeName() + "(...)";
-        };
+        if (value instanceof StringValue s) {
+            return "\"" + truncate(s.value(), 30) + "\"";
+        } else if (value instanceof NumberValue n) {
+            return n.toString();
+        } else if (value instanceof BoolValue b) {
+            return b.value() ? "True" : "False";
+        } else if (value instanceof NullValue) {
+            return "None";
+        } else if (value instanceof ListValue l) {
+            return "list[" + l.size() + "]";
+        } else if (value instanceof DictValue d) {
+            return "dict{" + d.size() + " keys}";
+        } else {
+            return value.typeName() + "(...)";
+        }
     }
     
     // ==================== Utility Methods ====================

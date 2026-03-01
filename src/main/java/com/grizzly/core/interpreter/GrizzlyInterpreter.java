@@ -345,29 +345,36 @@ public class GrizzlyInterpreter {
     }
     
     private Value executeStatement(Statement stmt, ExecutionContext context) {
-        return switch (stmt) {
-            case ImportStatement i -> {
-                if (!modules.containsModule(i.moduleName())) {
-                    throw new GrizzlyExecutionException(
-                        "Unknown module: " + i.moduleName(),
-                        i.lineNumber()
-                    );
-                }
-                yield NullValue.INSTANCE;
+        if (stmt instanceof ImportStatement i) {
+            if (!modules.containsModule(i.moduleName())) {
+                throw new GrizzlyExecutionException(
+                    "Unknown module: " + i.moduleName(),
+                    i.lineNumber()
+                );
             }
-            case Assignment a -> executeAssignment(a, context);
-            case ReturnStatement r -> evaluateExpression(r.value(), context);
-            case FunctionCall f -> executeFunctionCall(f, context);
-            case IfStatement i -> executeIf(i, context);
-            case ForLoop forLoop -> executeForLoop(forLoop, context);
-            case ExpressionStatement e -> evaluateExpression(e.expression(), context);
-            case BreakStatement b -> throw new com.grizzly.core.exception.BreakException();
-            case ContinueStatement c -> throw new com.grizzly.core.exception.ContinueException();
-            default -> throw new GrizzlyExecutionException(
+            return NullValue.INSTANCE;
+        } else if (stmt instanceof Assignment a) {
+            return executeAssignment(a, context);
+        } else if (stmt instanceof ReturnStatement r) {
+            return evaluateExpression(r.value(), context);
+        } else if (stmt instanceof FunctionCall f) {
+            return executeFunctionCall(f, context);
+        } else if (stmt instanceof IfStatement i) {
+            return executeIf(i, context);
+        } else if (stmt instanceof ForLoop forLoop) {
+            return executeForLoop(forLoop, context);
+        } else if (stmt instanceof ExpressionStatement e) {
+            return evaluateExpression(e.expression(), context);
+        } else if (stmt instanceof BreakStatement) {
+            throw new com.grizzly.core.exception.BreakException();
+        } else if (stmt instanceof ContinueStatement) {
+            throw new com.grizzly.core.exception.ContinueException();
+        } else {
+            throw new GrizzlyExecutionException(
                 "Unknown statement type: " + stmt.getClass().getSimpleName(),
                 stmt.lineNumber()
             );
-        };
+        }
     }
     
     private Value executeAssignment(Assignment assignment, ExecutionContext context) {
@@ -519,23 +526,35 @@ public class GrizzlyInterpreter {
     
     private Value evaluateExpression(Expression expr, ExecutionContext context) {
         try {
-            return switch (expr) {
-                case NumberLiteral n -> new NumberValue(n.value());
-                case StringLiteral s -> new StringValue(s.value());
-                case BooleanLiteral b -> BoolValue.of(b.value());
-                case NullLiteral ignored -> NullValue.INSTANCE;
-                case Identifier i -> context.get(i.name());
-                case DictLiteral d -> evaluateDictLiteral(d, context);
-                case ListLiteral l -> evaluateListLiteral(l, context);
-                case DictAccess d -> evaluateDictAccess(d, context);
-                case AttrAccess a -> evaluateAttrAccess(a, context);
-                case BinaryOp b -> evaluateBinaryOp(b, context);
-                case MethodCall m -> evaluateMethodCall(m, context);
-                case FunctionCallExpression f -> evaluateFunctionCallExpression(f, context);
-                default -> throw new GrizzlyExecutionException(
+            if (expr instanceof NumberLiteral n) {
+                return new NumberValue(n.value());
+            } else if (expr instanceof StringLiteral s) {
+                return new StringValue(s.value());
+            } else if (expr instanceof BooleanLiteral b) {
+                return BoolValue.of(b.value());
+            } else if (expr instanceof NullLiteral) {
+                return NullValue.INSTANCE;
+            } else if (expr instanceof Identifier i) {
+                return context.get(i.name());
+            } else if (expr instanceof DictLiteral d) {
+                return evaluateDictLiteral(d, context);
+            } else if (expr instanceof ListLiteral l) {
+                return evaluateListLiteral(l, context);
+            } else if (expr instanceof DictAccess d) {
+                return evaluateDictAccess(d, context);
+            } else if (expr instanceof AttrAccess a) {
+                return evaluateAttrAccess(a, context);
+            } else if (expr instanceof BinaryOp b) {
+                return evaluateBinaryOp(b, context);
+            } else if (expr instanceof MethodCall m) {
+                return evaluateMethodCall(m, context);
+            } else if (expr instanceof FunctionCallExpression f) {
+                return evaluateFunctionCallExpression(f, context);
+            } else {
+                throw new GrizzlyExecutionException(
                     "Unknown expression type: " + expr.getClass().getSimpleName()
                 );
-            };
+            }
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -562,38 +581,34 @@ public class GrizzlyInterpreter {
         String keyStr = getKeyString(keyVal);
         String fullPath = basePath + "[" + keyStr + "]";
         
-        return switch (obj) {
-            case DictValue dict -> {
-                Value result = dict.getOrNull(asString(keyVal));
-                if (result == null) {
-                    yield handleKeyNotFound(fullPath, asString(keyVal), safe, tracker, 0);
-                }
-                trackSuccess(fullPath, result, tracker, 0);
-                yield result;
+        if (obj instanceof DictValue dict) {
+            Value result = dict.getOrNull(asString(keyVal));
+            if (result == null) {
+                return handleKeyNotFound(fullPath, asString(keyVal), safe, tracker, 0);
             }
-            case ListValue list -> {
-                int index = toInt(keyVal);
-                int originalIndex = index;
-                if (index < 0) {
-                    index = list.size() + index;
-                }
-                if (index < 0 || index >= list.size()) {
-                    yield handleIndexOutOfBounds(fullPath, originalIndex, list.size(), safe, tracker, 0);
-                }
-                Value result = list.get(index);
-                trackSuccess(fullPath, result, tracker, 0);
-                yield result;
+            trackSuccess(fullPath, result, tracker, 0);
+            return result;
+        } else if (obj instanceof ListValue list) {
+            int index = toInt(keyVal);
+            int originalIndex = index;
+            if (index < 0) {
+                index = list.size() + index;
             }
-            default -> {
-                if (safe || config.nullHandling() == NullHandling.SAFE || 
-                    config.nullHandling() == NullHandling.SILENT) {
-                    yield NullValue.INSTANCE;
-                }
-                throw new GrizzlyExecutionException(
-                    "Cannot access key on object of type " + obj.typeName()
-                );
+            if (index < 0 || index >= list.size()) {
+                return handleIndexOutOfBounds(fullPath, originalIndex, list.size(), safe, tracker, 0);
             }
-        };
+            Value result = list.get(index);
+            trackSuccess(fullPath, result, tracker, 0);
+            return result;
+        } else {
+            if (safe || config.nullHandling() == NullHandling.SAFE || 
+                config.nullHandling() == NullHandling.SILENT) {
+                return NullValue.INSTANCE;
+            }
+            throw new GrizzlyExecutionException(
+                "Cannot access key on object of type " + obj.typeName()
+            );
+        }
     }
     
     private Value evaluateAttrAccess(AttrAccess attrAccess, ExecutionContext context) {
@@ -704,14 +719,17 @@ public class GrizzlyInterpreter {
     }
     
     private String buildExpressionPath(Expression expr) {
-        return switch (expr) {
-            case Identifier id -> id.name();
-            case AttrAccess attr -> buildExpressionPath(attr.object()) + 
+        if (expr instanceof Identifier id) {
+            return id.name();
+        } else if (expr instanceof AttrAccess attr) {
+            return buildExpressionPath(attr.object()) + 
                 (attr.safe() ? "?." : ".") + attr.attr();
-            case DictAccess dict -> buildExpressionPath(dict.object()) + 
+        } else if (expr instanceof DictAccess dict) {
+            return buildExpressionPath(dict.object()) + 
                 (dict.safe() ? "?[" : "[") + getKeyString(dict.key(), null) + "]";
-            default -> expr.toString();
-        };
+        } else {
+            return expr.toString();
+        }
     }
     
     private String getKeyString(Expression keyExpr, ExecutionContext context) {
@@ -765,27 +783,24 @@ public class GrizzlyInterpreter {
     }
     
     private boolean evaluateIn(Value left, Value right) {
-        return switch (right) {
-            case ListValue list -> {
-                for (Value item : list.items()) {
-                    if (areEqual(left, item)) {
-                        yield true;
-                    }
+        if (right instanceof ListValue list) {
+            for (Value item : list.items()) {
+                if (areEqual(left, item)) {
+                    return true;
                 }
-                yield false;
             }
-            case DictValue dict -> {
-                String key = asString(left);
-                yield dict.containsKey(key);
-            }
-            case StringValue str -> {
-                String needle = asString(left);
-                yield str.value().contains(needle);
-            }
-            default -> throw new GrizzlyExecutionException(
+            return false;
+        } else if (right instanceof DictValue dict) {
+            String key = asString(left);
+            return dict.containsKey(key);
+        } else if (right instanceof StringValue str) {
+            String needle = asString(left);
+            return str.value().contains(needle);
+        } else {
+            throw new GrizzlyExecutionException(
                 "Cannot use 'in' operator with " + right.typeName()
             );
-        };
+        }
     }
     
     private Value evaluatePlus(Value left, Value right) {
@@ -939,46 +954,45 @@ public class GrizzlyInterpreter {
     }
     
     private void setTarget(Expression target, Value value, ExecutionContext context) {
-        switch (target) {
-            case Identifier i -> context.set(i.name(), value);
-            case DictAccess d -> {
-                Value obj = evaluateExpression(d.object(), context);
-                Value keyVal = evaluateExpression(d.key(), context);
-                
-                if (obj instanceof NullValue && d.object() instanceof DictAccess) {
-                    DictValue newDict = DictValue.empty();
-                    setTarget(d.object(), newDict, context);
-                    newDict.put(asString(keyVal), value);
-                } else if (obj instanceof DictValue dict) {
-                    dict.put(asString(keyVal), value);
-                } else if (obj instanceof ListValue list) {
-                    int index = toInt(keyVal);
-                    if (index < 0) {
-                        index = list.size() + index;
-                    }
-                    if (index < 0 || index >= list.size()) {
-                        throw new GrizzlyExecutionException(
-                            "List index out of range: " + toInt(keyVal) + " (list size: " + list.size() + ")"
-                        );
-                    }
-                    list.set(index, value);
-                } else {
+        if (target instanceof Identifier i) {
+            context.set(i.name(), value);
+        } else if (target instanceof DictAccess d) {
+            Value obj = evaluateExpression(d.object(), context);
+            Value keyVal = evaluateExpression(d.key(), context);
+            
+            if (obj instanceof NullValue && d.object() instanceof DictAccess) {
+                DictValue newDict = DictValue.empty();
+                setTarget(d.object(), newDict, context);
+                newDict.put(asString(keyVal), value);
+            } else if (obj instanceof DictValue dict) {
+                dict.put(asString(keyVal), value);
+            } else if (obj instanceof ListValue list) {
+                int index = toInt(keyVal);
+                if (index < 0) {
+                    index = list.size() + index;
+                }
+                if (index < 0 || index >= list.size()) {
                     throw new GrizzlyExecutionException(
-                        "Cannot set key on object of type " + obj.typeName()
+                        "List index out of range: " + toInt(keyVal) + " (list size: " + list.size() + ")"
                     );
                 }
+                list.set(index, value);
+            } else {
+                throw new GrizzlyExecutionException(
+                    "Cannot set key on object of type " + obj.typeName()
+                );
             }
-            case AttrAccess a -> {
-                Value obj = evaluateExpression(a.object(), context);
-                if (obj instanceof DictValue dict) {
-                    dict.put(a.attr(), value);
-                } else {
-                    throw new GrizzlyExecutionException(
-                        "Cannot set attribute on object of type " + obj.typeName()
-                    );
-                }
+        } else if (target instanceof AttrAccess a) {
+            Value obj = evaluateExpression(a.object(), context);
+            if (obj instanceof DictValue dict) {
+                dict.put(a.attr(), value);
+            } else {
+                throw new GrizzlyExecutionException(
+                    "Cannot set attribute on object of type " + obj.typeName()
+                );
             }
-            default -> throw new GrizzlyExecutionException(
+        } else {
+            throw new GrizzlyExecutionException(
                 "Cannot assign to expression of type " + target.getClass().getSimpleName()
             );
         }
@@ -1069,28 +1083,28 @@ public class GrizzlyInterpreter {
      * Supports lists, strings (char iteration), and dicts (key iteration).
      */
     private List<Value> toIterableList(Value value, int lineNumber) {
-        return switch (value) {
-            case ListValue list -> list.items();
-            case StringValue str -> {
-                List<Value> chars = new ArrayList<>();
-                for (char c : str.value().toCharArray()) {
-                    chars.add(new StringValue(String.valueOf(c)));
-                }
-                yield chars;
+        if (value instanceof ListValue list) {
+            return list.items();
+        } else if (value instanceof StringValue str) {
+            List<Value> chars = new ArrayList<>();
+            for (char c : str.value().toCharArray()) {
+                chars.add(new StringValue(String.valueOf(c)));
             }
-            case DictValue dict -> {
-                List<Value> keys = new ArrayList<>();
-                for (String key : dict.entries().keySet()) {
-                    keys.add(new StringValue(key));
-                }
-                yield keys;
+            return chars;
+        } else if (value instanceof DictValue dict) {
+            List<Value> keys = new ArrayList<>();
+            for (String key : dict.entries().keySet()) {
+                keys.add(new StringValue(key));
             }
-            case NullValue ignored -> throw new GrizzlyExecutionException(
+            return keys;
+        } else if (value instanceof NullValue) {
+            throw new GrizzlyExecutionException(
                 "Cannot iterate over None", lineNumber
             );
-            default -> throw new GrizzlyExecutionException(
+        } else {
+            throw new GrizzlyExecutionException(
                 "Cannot iterate over " + value.typeName(), lineNumber
             );
-        };
+        }
     }
 }

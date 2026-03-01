@@ -2,7 +2,7 @@
 
 A lightweight Python-like template engine for JSON-to-JSON data transformation in Java.
 
-**Requirements:** Java 21+
+**Requirements:** Java 17+
 
 ## Quick Start
 

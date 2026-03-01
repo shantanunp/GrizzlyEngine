@@ -21,75 +21,82 @@ public final class ValueUtils {
      * Convert a Value to its string representation.
      */
     public static String asString(Value value) {
-        return switch (value) {
-            case StringValue s -> s.value();
-            case NumberValue n -> n.toString();
-            case BoolValue b -> b.toString();
-            case NullValue ignored -> "None";
-            default -> value.toString();
-        };
+        if (value instanceof StringValue s) {
+            return s.value();
+        } else if (value instanceof NumberValue n) {
+            return n.toString();
+        } else if (value instanceof BoolValue b) {
+            return b.toString();
+        } else if (value instanceof NullValue) {
+            return "None";
+        } else {
+            return value.toString();
+        }
     }
     
     /**
      * Convert a Value to double, throwing if not numeric.
      */
     public static double toDouble(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asDouble();
-            case StringValue s -> {
-                try {
-                    yield Double.parseDouble(s.value());
-                } catch (NumberFormatException e) {
-                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to number");
-                }
+        if (value instanceof NumberValue n) {
+            return n.asDouble();
+        } else if (value instanceof StringValue s) {
+            try {
+                return Double.parseDouble(s.value());
+            } catch (NumberFormatException e) {
+                throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to number");
             }
-            case DecimalValue d -> d.toDouble();
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to number");
-        };
+        } else if (value instanceof DecimalValue d) {
+            return d.toDouble();
+        } else {
+            throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to number");
+        }
     }
     
     /**
      * Convert a Value to int, throwing if not numeric.
      */
     public static int toInt(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asInt();
-            case StringValue s -> {
+        if (value instanceof NumberValue n) {
+            return n.asInt();
+        } else if (value instanceof StringValue s) {
+            try {
+                return Integer.parseInt(s.value());
+            } catch (NumberFormatException e) {
                 try {
-                    yield Integer.parseInt(s.value());
-                } catch (NumberFormatException e) {
-                    try {
-                        yield (int) Double.parseDouble(s.value());
-                    } catch (NumberFormatException e2) {
-                        throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to integer");
-                    }
+                    return (int) Double.parseDouble(s.value());
+                } catch (NumberFormatException e2) {
+                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to integer");
                 }
             }
-            case DecimalValue d -> d.toInt();
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to integer");
-        };
+        } else if (value instanceof DecimalValue d) {
+            return d.toInt();
+        } else {
+            throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to integer");
+        }
     }
     
     /**
      * Convert a Value to long, throwing if not numeric.
      */
     public static long toLong(Value value) {
-        return switch (value) {
-            case NumberValue n -> n.asLong();
-            case StringValue s -> {
+        if (value instanceof NumberValue n) {
+            return n.asLong();
+        } else if (value instanceof StringValue s) {
+            try {
+                return Long.parseLong(s.value());
+            } catch (NumberFormatException e) {
                 try {
-                    yield Long.parseLong(s.value());
-                } catch (NumberFormatException e) {
-                    try {
-                        yield (long) Double.parseDouble(s.value());
-                    } catch (NumberFormatException e2) {
-                        throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to long");
-                    }
+                    return (long) Double.parseDouble(s.value());
+                } catch (NumberFormatException e2) {
+                    throw new GrizzlyExecutionException("Cannot convert '" + s.value() + "' to long");
                 }
             }
-            case DecimalValue d -> (long) d.toDouble();
-            default -> throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to long");
-        };
+        } else if (value instanceof DecimalValue d) {
+            return (long) d.toDouble();
+        } else {
+            throw new GrizzlyExecutionException("Cannot convert " + value.typeName() + " to long");
+        }
     }
     
     // ==================== Argument Validation ====================

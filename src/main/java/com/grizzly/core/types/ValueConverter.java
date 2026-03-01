@@ -146,37 +146,40 @@ public final class ValueConverter {
      * @return The corresponding Java object
      */
     public static Object toJava(Value value) {
-        return switch (value) {
-            case NullValue ignored -> null;
-            case StringValue s -> s.value();
-            case NumberValue n -> {
-                if (n.isInteger()) {
-                    long l = n.asLong();
-                    if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
-                        yield (int) l;
-                    }
-                    yield l;
+        if (value instanceof NullValue) {
+            return null;
+        } else if (value instanceof StringValue s) {
+            return s.value();
+        } else if (value instanceof NumberValue n) {
+            if (n.isInteger()) {
+                long l = n.asLong();
+                if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
+                    return (int) l;
                 }
-                yield n.asDouble();
+                return l;
             }
-            case BoolValue b -> b.value();
-            case ListValue l -> {
-                List<Object> list = new ArrayList<>(l.size());
-                for (Value item : l.items()) {
-                    list.add(toJava(item));
-                }
-                yield list;
+            return n.asDouble();
+        } else if (value instanceof BoolValue b) {
+            return b.value();
+        } else if (value instanceof ListValue l) {
+            List<Object> list = new ArrayList<>(l.size());
+            for (Value item : l.items()) {
+                list.add(toJava(item));
             }
-            case DictValue d -> {
-                Map<String, Object> map = new HashMap<>();
-                for (Map.Entry<String, Value> entry : d.entries().entrySet()) {
-                    map.put(entry.getKey(), toJava(entry.getValue()));
-                }
-                yield map;
+            return list;
+        } else if (value instanceof DictValue d) {
+            Map<String, Object> map = new HashMap<>();
+            for (Map.Entry<String, Value> entry : d.entries().entrySet()) {
+                map.put(entry.getKey(), toJava(entry.getValue()));
             }
-            case DateTimeValue dt -> dt.toString();
-            case DecimalValue dec -> dec.toString();
-        };
+            return map;
+        } else if (value instanceof DateTimeValue dt) {
+            return dt.toString();
+        } else if (value instanceof DecimalValue dec) {
+            return dec.toString();
+        } else {
+            throw new IllegalArgumentException("Unknown Value type: " + value.getClass().getSimpleName());
+        }
     }
     
     /**

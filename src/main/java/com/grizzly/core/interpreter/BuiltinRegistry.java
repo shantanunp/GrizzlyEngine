@@ -51,14 +51,17 @@ public final class BuiltinRegistry {
             requireArgCount("len", args, 1);
             Value val = args.get(0);
             
-            return switch (val) {
-                case ListValue l -> NumberValue.of(l.size());
-                case DictValue d -> NumberValue.of(d.size());
-                case StringValue s -> NumberValue.of(s.value().length());
-                default -> throw new GrizzlyExecutionException(
+            if (val instanceof ListValue l) {
+                return NumberValue.of(l.size());
+            } else if (val instanceof DictValue d) {
+                return NumberValue.of(d.size());
+            } else if (val instanceof StringValue s) {
+                return NumberValue.of(s.value().length());
+            } else {
+                throw new GrizzlyExecutionException(
                     "len() argument must be a list, dict, or string, got: " + val.typeName()
                 );
-            };
+            }
         });
         
         // range()
@@ -105,11 +108,13 @@ public final class BuiltinRegistry {
             requireArgCount("str", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case NullValue ignored -> new StringValue("None");
-                case BoolValue b -> new StringValue(b.value() ? "True" : "False");
-                default -> new StringValue(value.toString());
-            };
+            if (value instanceof NullValue) {
+                return new StringValue("None");
+            } else if (value instanceof BoolValue b) {
+                return new StringValue(b.value() ? "True" : "False");
+            } else {
+                return new StringValue(value.toString());
+            }
         });
         
         // int() - convert to integer
@@ -117,26 +122,27 @@ public final class BuiltinRegistry {
             requireArgCount("int", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case NumberValue n -> NumberValue.of(n.asInt());
-                case StringValue s -> {
+            if (value instanceof NumberValue n) {
+                return NumberValue.of(n.asInt());
+            } else if (value instanceof StringValue s) {
+                try {
+                    return NumberValue.of(Integer.parseInt(s.value().strip()));
+                } catch (NumberFormatException e) {
                     try {
-                        yield NumberValue.of(Integer.parseInt(s.value().strip()));
-                    } catch (NumberFormatException e) {
-                        try {
-                            yield NumberValue.of((int) Double.parseDouble(s.value().strip()));
-                        } catch (NumberFormatException e2) {
-                            throw new GrizzlyExecutionException(
-                                "Cannot convert '" + s.value() + "' to int"
-                            );
-                        }
+                        return NumberValue.of((int) Double.parseDouble(s.value().strip()));
+                    } catch (NumberFormatException e2) {
+                        throw new GrizzlyExecutionException(
+                            "Cannot convert '" + s.value() + "' to int"
+                        );
                     }
                 }
-                case BoolValue b -> NumberValue.of(b.value() ? 1 : 0);
-                default -> throw new GrizzlyExecutionException(
+            } else if (value instanceof BoolValue b) {
+                return NumberValue.of(b.value() ? 1 : 0);
+            } else {
+                throw new GrizzlyExecutionException(
                     "Cannot convert " + value.typeName() + " to int"
                 );
-            };
+            }
         });
         
         // float() - convert to float
@@ -144,22 +150,23 @@ public final class BuiltinRegistry {
             requireArgCount("float", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case NumberValue n -> NumberValue.of(n.asDouble());
-                case StringValue s -> {
-                    try {
-                        yield NumberValue.of(Double.parseDouble(s.value().strip()));
-                    } catch (NumberFormatException e) {
-                        throw new GrizzlyExecutionException(
-                            "Cannot convert '" + s.value() + "' to float"
-                        );
-                    }
+            if (value instanceof NumberValue n) {
+                return NumberValue.of(n.asDouble());
+            } else if (value instanceof StringValue s) {
+                try {
+                    return NumberValue.of(Double.parseDouble(s.value().strip()));
+                } catch (NumberFormatException e) {
+                    throw new GrizzlyExecutionException(
+                        "Cannot convert '" + s.value() + "' to float"
+                    );
                 }
-                case BoolValue b -> NumberValue.of(b.value() ? 1.0 : 0.0);
-                default -> throw new GrizzlyExecutionException(
+            } else if (value instanceof BoolValue b) {
+                return NumberValue.of(b.value() ? 1.0 : 0.0);
+            } else {
+                throw new GrizzlyExecutionException(
                     "Cannot convert " + value.typeName() + " to float"
                 );
-            };
+            }
         });
         
         // bool() - convert to boolean
@@ -173,18 +180,18 @@ public final class BuiltinRegistry {
             requireArgCount("abs", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case NumberValue n -> {
-                    if (n.isInteger()) {
-                        yield NumberValue.of(Math.abs(n.asLong()));
-                    }
-                    yield NumberValue.of(Math.abs(n.asDouble()));
+            if (value instanceof NumberValue n) {
+                if (n.isInteger()) {
+                    return NumberValue.of(Math.abs(n.asLong()));
                 }
-                case DecimalValue d -> new DecimalValue(d.getValue().abs());
-                default -> throw new GrizzlyExecutionException(
+                return NumberValue.of(Math.abs(n.asDouble()));
+            } else if (value instanceof DecimalValue d) {
+                return new DecimalValue(d.getValue().abs());
+            } else {
+                throw new GrizzlyExecutionException(
                     "abs() argument must be a number, got: " + value.typeName()
                 );
-            };
+            }
         });
         
         // min() - minimum value
@@ -380,26 +387,25 @@ public final class BuiltinRegistry {
             requireArgCount("list", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case ListValue l -> new ListValue(new java.util.ArrayList<>(l.items()));
-                case StringValue s -> {
-                    java.util.List<Value> chars = new java.util.ArrayList<>();
-                    for (char c : s.value().toCharArray()) {
-                        chars.add(new StringValue(String.valueOf(c)));
-                    }
-                    yield new ListValue(chars);
+            if (value instanceof ListValue l) {
+                return new ListValue(new java.util.ArrayList<>(l.items()));
+            } else if (value instanceof StringValue s) {
+                java.util.List<Value> chars = new java.util.ArrayList<>();
+                for (char c : s.value().toCharArray()) {
+                    chars.add(new StringValue(String.valueOf(c)));
                 }
-                case DictValue d -> {
-                    java.util.List<Value> keys = new java.util.ArrayList<>();
-                    for (String key : d.entries().keySet()) {
-                        keys.add(new StringValue(key));
-                    }
-                    yield new ListValue(keys);
+                return new ListValue(chars);
+            } else if (value instanceof DictValue d) {
+                java.util.List<Value> keys = new java.util.ArrayList<>();
+                for (String key : d.entries().keySet()) {
+                    keys.add(new StringValue(key));
                 }
-                default -> throw new GrizzlyExecutionException(
+                return new ListValue(keys);
+            } else {
+                throw new GrizzlyExecutionException(
                     "list() argument must be iterable, got: " + value.typeName()
                 );
-            };
+            }
         });
         
         // dict() - convert to dict or create empty
@@ -606,18 +612,18 @@ public final class BuiltinRegistry {
             requireArgCount("Decimal", args, 1);
             Value value = args.get(0);
             
-            return switch (value) {
-                case StringValue s -> new DecimalValue(s.value());
-                case NumberValue n -> {
-                    if (n.isInteger()) {
-                        yield new DecimalValue(n.asInt());
-                    }
-                    yield new DecimalValue(String.valueOf(n.asDouble()));
+            if (value instanceof StringValue s) {
+                return new DecimalValue(s.value());
+            } else if (value instanceof NumberValue n) {
+                if (n.isInteger()) {
+                    return new DecimalValue(n.asInt());
                 }
-                default -> throw new GrizzlyExecutionException(
+                return new DecimalValue(String.valueOf(n.asDouble()));
+            } else {
+                throw new GrizzlyExecutionException(
                     "Decimal() argument must be a string or number, got: " + value.typeName()
                 );
-            };
+            }
         });
         
         // round()
