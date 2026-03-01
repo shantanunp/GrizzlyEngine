@@ -93,4 +93,47 @@ class GrizzlyLexerTest {
         assertThat(tokens).extracting(Token::type)
             .contains(TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER);
     }
+    
+    @Test
+    void shouldTokenizeSafeDotOperator() {
+        String code = "x = INPUT?.deal?.loan";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).extracting(Token::type)
+            .contains(TokenType.SAFE_DOT);
+        
+        long safeDotCount = tokens.stream()
+            .filter(t -> t.type() == TokenType.SAFE_DOT)
+            .count();
+        assertThat(safeDotCount).isEqualTo(2);
+    }
+    
+    @Test
+    void shouldTokenizeSafeBracketOperator() {
+        String code = "x = INPUT?[\"key\"]?[0]";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).extracting(Token::type)
+            .contains(TokenType.SAFE_LBRACKET);
+        
+        long safeBracketCount = tokens.stream()
+            .filter(t -> t.type() == TokenType.SAFE_LBRACKET)
+            .count();
+        assertThat(safeBracketCount).isEqualTo(2);
+    }
+    
+    @Test
+    void shouldTokenizeMixedSafeNavigation() {
+        String code = "x = INPUT?.items?[0]?.name";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens).extracting(Token::type)
+            .contains(TokenType.SAFE_DOT, TokenType.SAFE_LBRACKET);
+    }
 }

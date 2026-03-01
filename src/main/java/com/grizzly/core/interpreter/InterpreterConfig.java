@@ -1,26 +1,44 @@
 package com.grizzly.core.interpreter;
 
+import com.grizzly.core.validation.NullHandling;
+
 import java.time.Duration;
 
 /**
  * Configuration for the Grizzly interpreter with production safeguards.
  * 
- * <p>Use this to prevent runaway templates from consuming resources:
+ * <p>Use this to configure resource limits and null handling behavior:
  * <ul>
  *   <li>Max loop iterations - prevents infinite loops</li>
  *   <li>Max recursion depth - prevents stack overflow</li>
  *   <li>Execution timeout - prevents long-running transforms</li>
+ *   <li>Null handling - controls behavior when accessing null properties</li>
+ *   <li>Access tracking - enables validation reports</li>
+ * </ul>
+ * 
+ * <h2>Null Handling Modes</h2>
+ * 
+ * <ul>
+ *   <li><b>STRICT</b> - Throws exception on null access (use during development)</li>
+ *   <li><b>SAFE</b> - Returns null, tracks all accesses (recommended for production)</li>
+ *   <li><b>SILENT</b> - Returns null, no tracking (maximum performance)</li>
  * </ul>
  * 
  * <p><b>Example:</b>
  * <pre>{@code
- * // Use defaults (recommended for most cases)
+ * // Default config (SAFE mode with tracking)
  * InterpreterConfig config = InterpreterConfig.defaults();
  * 
- * // Strict limits for untrusted templates
- * InterpreterConfig strict = InterpreterConfig.builder()
+ * // Development mode (STRICT - fail fast on null)
+ * InterpreterConfig dev = InterpreterConfig.builder()
+ *     .nullHandling(NullHandling.STRICT)
+ *     .build();
+ * 
+ * // Production mode with custom limits
+ * InterpreterConfig prod = InterpreterConfig.builder()
+ *     .nullHandling(NullHandling.SAFE)
+ *     .trackAccess(true)
  *     .maxLoopIterations(10_000)
- *     .maxRecursionDepth(50)
  *     .executionTimeout(Duration.ofSeconds(5))
  *     .build();
  * }</pre>
@@ -29,7 +47,9 @@ public record InterpreterConfig(
     int maxLoopIterations,
     int maxRecursionDepth,
     Duration executionTimeout,
-    boolean strictMode
+    boolean strictMode,
+    NullHandling nullHandling,
+    boolean trackAccess
 ) {
     
     /** Default max iterations per loop (1 million) */
@@ -43,13 +63,24 @@ public record InterpreterConfig(
     
     /**
      * Create config with default production-safe values.
+     * 
+     * <p>Defaults:
+     * <ul>
+     *   <li>Null handling: SAFE (never crashes)</li>
+     *   <li>Access tracking: enabled</li>
+     *   <li>Max loop iterations: 1,000,000</li>
+     *   <li>Max recursion depth: 1,000</li>
+     *   <li>Execution timeout: 30 seconds</li>
+     * </ul>
      */
     public static InterpreterConfig defaults() {
         return new InterpreterConfig(
             DEFAULT_MAX_LOOP_ITERATIONS,
             DEFAULT_MAX_RECURSION_DEPTH,
             DEFAULT_EXECUTION_TIMEOUT,
-            false
+            false,
+            NullHandling.SAFE,
+            true
         );
     }
     
@@ -61,6 +92,40 @@ public record InterpreterConfig(
             Integer.MAX_VALUE,
             Integer.MAX_VALUE,
             Duration.ofDays(365),
+            false,
+            NullHandling.SAFE,
+            true
+        );
+    }
+    
+    /**
+     * Create config for development (STRICT mode).
+     * 
+     * <p>Throws exceptions on null access to catch issues early.
+     */
+    public static InterpreterConfig development() {
+        return new InterpreterConfig(
+            DEFAULT_MAX_LOOP_ITERATIONS,
+            DEFAULT_MAX_RECURSION_DEPTH,
+            DEFAULT_EXECUTION_TIMEOUT,
+            true,
+            NullHandling.STRICT,
+            true
+        );
+    }
+    
+    /**
+     * Create config for high-performance batch processing.
+     * 
+     * <p>Uses SILENT mode with no tracking for maximum speed.
+     */
+    public static InterpreterConfig highPerformance() {
+        return new InterpreterConfig(
+            DEFAULT_MAX_LOOP_ITERATIONS,
+            DEFAULT_MAX_RECURSION_DEPTH,
+            DEFAULT_EXECUTION_TIMEOUT,
+            false,
+            NullHandling.SILENT,
             false
         );
     }
@@ -73,6 +138,15 @@ public record InterpreterConfig(
     }
     
     /**
+     * Check if access tracking is enabled.
+     * 
+     * <p>Note: In SILENT mode, tracking is always disabled regardless of this setting.
+     */
+    public boolean isTrackingEnabled() {
+        return trackAccess && nullHandling != NullHandling.SILENT;
+    }
+    
+    /**
      * Builder for InterpreterConfig.
      */
     public static class Builder {
@@ -80,6 +154,8 @@ public record InterpreterConfig(
         private int maxRecursionDepth = DEFAULT_MAX_RECURSION_DEPTH;
         private Duration executionTimeout = DEFAULT_EXECUTION_TIMEOUT;
         private boolean strictMode = false;
+        private NullHandling nullHandling = NullHandling.SAFE;
+        private boolean trackAccess = true;
         
         public Builder maxLoopIterations(int max) {
             if (max <= 0) {
@@ -105,8 +181,44 @@ public record InterpreterConfig(
             return this;
         }
         
+        /**
+         * @deprecated Use {@link #nullHandling(NullHandling)} instead
+         */
+        @Deprecated
         public Builder strictMode(boolean strict) {
             this.strictMode = strict;
+            if (strict) {
+                this.nullHandling = NullHandling.STRICT;
+            }
+            return this;
+        }
+        
+        /**
+         * Set the null handling mode.
+         * 
+         * @param handling How to handle null values during property access
+         */
+        public Builder nullHandling(NullHandling handling) {
+            if (handling == null) {
+                throw new IllegalArgumentException("nullHandling cannot be null");
+            }
+            this.nullHandling = handling;
+            this.strictMode = (handling == NullHandling.STRICT);
+            return this;
+        }
+        
+        /**
+         * Enable or disable access tracking.
+         * 
+         * <p>When enabled, all property accesses are recorded and can be
+         * retrieved via {@link com.grizzly.core.validation.ValidationReport}.
+         * 
+         * <p>Note: Tracking is automatically disabled in SILENT mode.
+         * 
+         * @param track true to enable tracking, false to disable
+         */
+        public Builder trackAccess(boolean track) {
+            this.trackAccess = track;
             return this;
         }
         
@@ -115,7 +227,9 @@ public record InterpreterConfig(
                 maxLoopIterations,
                 maxRecursionDepth,
                 executionTimeout,
-                strictMode
+                strictMode,
+                nullHandling,
+                trackAccess
             );
         }
     }

@@ -4,6 +4,7 @@ import com.grizzly.core.exception.GrizzlyExecutionException;
 import com.grizzly.core.logging.GrizzlyLogger;
 import com.grizzly.core.parser.ast.*;
 import com.grizzly.core.types.*;
+import com.grizzly.core.validation.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -241,11 +242,35 @@ public class GrizzlyInterpreter {
      *         doesn't return a dict, or any runtime error occurs
      */
     public DictValue executeTyped(DictValue input) {
-        GrizzlyLogger.info("INTERPRETER", "Starting execution");
+        AccessTracker tracker = new AccessTracker(config.isTrackingEnabled());
+        return executeTyped(input, tracker);
+    }
+    
+    /**
+     * Execute the transform function with access tracking.
+     * 
+     * <p>This method provides full access tracking for validation reports.
+     * Use this when you need to know which property accesses failed.
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * AccessTracker tracker = new AccessTracker(true);
+     * DictValue output = interpreter.executeTyped(input, tracker);
+     * ValidationReport report = tracker.generateReport();
+     * }</pre>
+     * 
+     * @param input   Input data as DictValue
+     * @param tracker AccessTracker for recording property accesses
+     * @return Output data as DictValue
+     * @throws GrizzlyExecutionException if transform function is not found,
+     *         doesn't return a dict, or any runtime error occurs
+     */
+    public DictValue executeTyped(DictValue input, AccessTracker tracker) {
+        GrizzlyLogger.info("INTERPRETER", "Starting execution (mode: " + config.nullHandling() + ")");
         executionStartTime = System.currentTimeMillis();
         currentRecursionDepth = 0;
         
-        ExecutionContext globalContext = new ExecutionContext();
+        ExecutionContext globalContext = new ExecutionContext(tracker);
         for (ImportStatement importStmt : program.imports()) {
             executeStatement(importStmt, globalContext);
         }
@@ -255,7 +280,7 @@ public class GrizzlyInterpreter {
             throw new GrizzlyExecutionException("No 'transform' function found in template");
         }
         
-        ExecutionContext context = new ExecutionContext();
+        ExecutionContext context = new ExecutionContext(tracker);
         context.set("INPUT", input);
         GrizzlyLogger.debug("INTERPRETER", "Bound INPUT with " + input.size() + " keys");
         
@@ -266,6 +291,11 @@ public class GrizzlyInterpreter {
             long elapsed = System.currentTimeMillis() - executionStartTime;
             GrizzlyLogger.info("INTERPRETER", "Execution complete in " + elapsed + "ms, " +
                 "output has " + dict.size() + " keys");
+            
+            if (tracker.isEnabled()) {
+                GrizzlyLogger.debug("INTERPRETER", "Access tracking: " + tracker.size() + " accesses recorded");
+            }
+            
             return dict;
         }
         
@@ -517,41 +547,195 @@ public class GrizzlyInterpreter {
     
     private Value evaluateDictAccess(DictAccess dictAccess, ExecutionContext context) {
         Value obj = evaluateExpression(dictAccess.object(), context);
+        boolean safe = dictAccess.safe();
+        String basePath = buildExpressionPath(dictAccess.object());
+        AccessTracker tracker = context.getAccessTracker();
+        
+        // Handle null object
+        if (obj instanceof NullValue) {
+            String keyStr = getKeyString(dictAccess.key(), context);
+            String fullPath = basePath + "[" + keyStr + "]";
+            return handleNullAccess(fullPath, basePath, safe, tracker, 0);
+        }
+        
         Value keyVal = evaluateExpression(dictAccess.key(), context);
+        String keyStr = getKeyString(keyVal);
+        String fullPath = basePath + "[" + keyStr + "]";
         
         return switch (obj) {
             case DictValue dict -> {
-                String key = asString(keyVal);
-                yield dict.get(key);
+                Value result = dict.getOrNull(asString(keyVal));
+                if (result == null) {
+                    yield handleKeyNotFound(fullPath, asString(keyVal), safe, tracker, 0);
+                }
+                trackSuccess(fullPath, result, tracker, 0);
+                yield result;
             }
             case ListValue list -> {
                 int index = toInt(keyVal);
+                int originalIndex = index;
                 if (index < 0) {
                     index = list.size() + index;
                 }
                 if (index < 0 || index >= list.size()) {
-                    throw new GrizzlyExecutionException(
-                        "List index out of range: " + toInt(keyVal) + " (list size: " + list.size() + ")"
-                    );
+                    yield handleIndexOutOfBounds(fullPath, originalIndex, list.size(), safe, tracker, 0);
                 }
-                yield list.get(index);
+                Value result = list.get(index);
+                trackSuccess(fullPath, result, tracker, 0);
+                yield result;
             }
-            default -> throw new GrizzlyExecutionException(
-                "Cannot access key on object of type " + obj.typeName()
-            );
+            default -> {
+                if (safe || config.nullHandling() == NullHandling.SAFE || 
+                    config.nullHandling() == NullHandling.SILENT) {
+                    yield NullValue.INSTANCE;
+                }
+                throw new GrizzlyExecutionException(
+                    "Cannot access key on object of type " + obj.typeName()
+                );
+            }
         };
     }
     
     private Value evaluateAttrAccess(AttrAccess attrAccess, ExecutionContext context) {
         Value obj = evaluateExpression(attrAccess.object(), context);
+        boolean safe = attrAccess.safe();
+        String basePath = buildExpressionPath(attrAccess.object());
+        String attr = attrAccess.attr();
+        String fullPath = basePath + "." + attr;
+        AccessTracker tracker = context.getAccessTracker();
+        
+        // Handle null object
+        if (obj instanceof NullValue) {
+            return handleNullAccess(fullPath, basePath, safe, tracker, 0);
+        }
         
         if (obj instanceof DictValue dict) {
-            return dict.get(attrAccess.attr());
+            Value result = dict.getOrNull(attr);
+            if (result == null) {
+                return handleKeyNotFound(fullPath, attr, safe, tracker, 0);
+            }
+            trackSuccess(fullPath, result, tracker, 0);
+            return result;
+        }
+        
+        // Object is not a dict
+        if (safe || config.nullHandling() == NullHandling.SAFE || 
+            config.nullHandling() == NullHandling.SILENT) {
+            return NullValue.INSTANCE;
         }
         
         throw new GrizzlyExecutionException(
-            "Cannot access attribute '" + attrAccess.attr() + "' on object of type " + obj.typeName()
+            "Cannot access attribute '" + attr + "' on object of type " + obj.typeName()
         );
+    }
+    
+    // ==================== Safe Access Helpers ====================
+    
+    private Value handleNullAccess(String path, String brokenAt, boolean safe, AccessTracker tracker, int lineNumber) {
+        switch (config.nullHandling()) {
+            case STRICT -> {
+                if (safe) {
+                    tracker.recordPathBroken(path, brokenAt, lineNumber, true);
+                    return NullValue.INSTANCE;
+                }
+                throw new GrizzlyExecutionException(
+                    "Cannot access '" + path + "' - '" + brokenAt + "' is null. " +
+                    "Use ?. for safe navigation or switch to SAFE mode."
+                );
+            }
+            case SAFE -> {
+                tracker.recordPathBroken(path, brokenAt, lineNumber, safe);
+                return NullValue.INSTANCE;
+            }
+            case SILENT -> {
+                return NullValue.INSTANCE;
+            }
+        }
+        return NullValue.INSTANCE;
+    }
+    
+    private Value handleKeyNotFound(String path, String key, boolean safe, AccessTracker tracker, int lineNumber) {
+        switch (config.nullHandling()) {
+            case STRICT -> {
+                if (safe) {
+                    tracker.recordKeyNotFound(path, key, lineNumber, true);
+                    return NullValue.INSTANCE;
+                }
+                throw new GrizzlyExecutionException(
+                    "Key not found: '" + key + "' in path '" + path + "'. " +
+                    "Use ?. for safe navigation or switch to SAFE mode."
+                );
+            }
+            case SAFE -> {
+                tracker.recordKeyNotFound(path, key, lineNumber, safe);
+                return NullValue.INSTANCE;
+            }
+            case SILENT -> {
+                return NullValue.INSTANCE;
+            }
+        }
+        return NullValue.INSTANCE;
+    }
+    
+    private Value handleIndexOutOfBounds(String path, int index, int listSize, boolean safe, AccessTracker tracker, int lineNumber) {
+        switch (config.nullHandling()) {
+            case STRICT -> {
+                if (safe) {
+                    tracker.recordIndexOutOfBounds(path, index, listSize, lineNumber, true);
+                    return NullValue.INSTANCE;
+                }
+                throw new GrizzlyExecutionException(
+                    "List index out of range: " + index + " (list size: " + listSize + ") in path '" + path + "'"
+                );
+            }
+            case SAFE -> {
+                tracker.recordIndexOutOfBounds(path, index, listSize, lineNumber, safe);
+                return NullValue.INSTANCE;
+            }
+            case SILENT -> {
+                return NullValue.INSTANCE;
+            }
+        }
+        return NullValue.INSTANCE;
+    }
+    
+    private void trackSuccess(String path, Value value, AccessTracker tracker, int lineNumber) {
+        tracker.recordSuccess(path, value, lineNumber);
+    }
+    
+    private String buildExpressionPath(Expression expr) {
+        return switch (expr) {
+            case Identifier id -> id.name();
+            case AttrAccess attr -> buildExpressionPath(attr.object()) + 
+                (attr.safe() ? "?." : ".") + attr.attr();
+            case DictAccess dict -> buildExpressionPath(dict.object()) + 
+                (dict.safe() ? "?[" : "[") + getKeyString(dict.key(), null) + "]";
+            default -> expr.toString();
+        };
+    }
+    
+    private String getKeyString(Expression keyExpr, ExecutionContext context) {
+        if (keyExpr instanceof StringLiteral str) {
+            return "\"" + str.value() + "\"";
+        }
+        if (keyExpr instanceof NumberLiteral num) {
+            return String.valueOf(num.value());
+        }
+        if (context != null) {
+            Value keyVal = evaluateExpression(keyExpr, context);
+            return getKeyString(keyVal);
+        }
+        return keyExpr.toString();
+    }
+    
+    private String getKeyString(Value keyVal) {
+        if (keyVal instanceof StringValue str) {
+            return "\"" + str.value() + "\"";
+        }
+        if (keyVal instanceof NumberValue num) {
+            return String.valueOf(num.value());
+        }
+        return keyVal.toString();
     }
     
     private Value evaluateBinaryOp(BinaryOp binaryOp, ExecutionContext context) {

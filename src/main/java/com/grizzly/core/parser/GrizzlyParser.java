@@ -972,18 +972,22 @@ public class GrizzlyParser {
             Expression expr = new Identifier(name);
             
             // Check for dict access, list access, attribute access, or method call
+            // Also handles safe navigation: ?. and ?[
             while (true) {
-                if (peek().type() == TokenType.LBRACKET) {
-                    // Could be dict access or list access: obj["key"] or list[0]
+                TokenType tokenType = peek().type();
+                
+                if (tokenType == TokenType.LBRACKET || tokenType == TokenType.SAFE_LBRACKET) {
+                    // Dict/list access: obj["key"] or obj?["key"]
+                    boolean safe = (tokenType == TokenType.SAFE_LBRACKET);
                     advance();
                     Expression key = parseExpression();
                     expect(TokenType.RBRACKET, "Expected ']'");
                     
-                    // Use DictAccess for now (works for both dict and list)
-                    expr = new DictAccess(expr, key);
+                    expr = new DictAccess(expr, key, safe);
                     
-                } else if (peek().type() == TokenType.DOT) {
-                    // Could be attribute access or method call
+                } else if (tokenType == TokenType.DOT || tokenType == TokenType.SAFE_DOT) {
+                    // Attribute access or method call: obj.attr or obj?.attr
+                    boolean safe = (tokenType == TokenType.SAFE_DOT);
                     advance();
                     String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").value();
                     
@@ -1004,11 +1008,11 @@ public class GrizzlyParser {
                         expect(TokenType.RPAREN, "Expected ')'");
                         expr = new MethodCall(expr, attr, args);
                     } else {
-                        // Regular attribute access
-                        expr = new AttrAccess(expr, attr);
+                        // Attribute access (with safe flag)
+                        expr = new AttrAccess(expr, attr, safe);
                     }
                     
-                } else if (peek().type() == TokenType.LPAREN) {
+                } else if (tokenType == TokenType.LPAREN) {
                     // Function call expression: len(items), helper(x)
                     advance(); // Skip '('
                     List<Expression> args = new ArrayList<>();

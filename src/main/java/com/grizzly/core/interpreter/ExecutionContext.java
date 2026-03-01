@@ -1,21 +1,26 @@
 package com.grizzly.core.interpreter;
 
 import com.grizzly.core.types.*;
+import com.grizzly.core.validation.AccessTracker;
+
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Execution context - holds variables during template execution.
+ * Execution context - holds variables and access tracking during template execution.
  * 
  * <p>Think of this like memory during program execution:
  * <ul>
  *   <li>INPUT: the input data (DictValue)</li>
  *   <li>OUTPUT: the output data being built (DictValue)</li>
  *   <li>Any other variables created during execution</li>
+ *   <li>AccessTracker for recording property accesses</li>
  * </ul>
  * 
  * <p>Example:
  * <pre>{@code
+ * AccessTracker tracker = new AccessTracker(true);
+ * ExecutionContext context = new ExecutionContext(tracker);
  * context.set("INPUT", inputData);
  * context.set("OUTPUT", DictValue.empty());
  * Value value = context.get("INPUT");
@@ -25,13 +30,33 @@ public class ExecutionContext {
     
     private final Map<String, Value> variables = new HashMap<>();
     private final ExecutionContext parent;
+    private final AccessTracker accessTracker;
     
-    public ExecutionContext() {
+    /**
+     * Create a root context with access tracking.
+     * 
+     * @param accessTracker Tracker for recording property accesses
+     */
+    public ExecutionContext(AccessTracker accessTracker) {
         this.parent = null;
+        this.accessTracker = accessTracker;
     }
     
+    /**
+     * Create a root context without tracking (backward compatible).
+     */
+    public ExecutionContext() {
+        this(AccessTracker.disabled());
+    }
+    
+    /**
+     * Create a child context (inherits tracker from parent).
+     * 
+     * @param parent The parent context
+     */
     public ExecutionContext(ExecutionContext parent) {
         this.parent = parent;
+        this.accessTracker = parent.accessTracker;
     }
     
     /**
@@ -82,9 +107,21 @@ public class ExecutionContext {
     
     /**
      * Create a child context (for nested scopes).
+     * 
+     * <p>The child context inherits the AccessTracker from this context,
+     * so all property accesses in child scopes are still tracked.
      */
     public ExecutionContext createChild() {
         return new ExecutionContext(this);
+    }
+    
+    /**
+     * Get the access tracker.
+     * 
+     * @return The AccessTracker for this context
+     */
+    public AccessTracker getAccessTracker() {
+        return accessTracker;
     }
     
     /**

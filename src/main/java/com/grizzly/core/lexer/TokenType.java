@@ -55,6 +55,10 @@ public enum TokenType {
     DOT,        // .
     COLON,      // :
     
+    // Safe navigation operators
+    SAFE_DOT,       // ?.
+    SAFE_LBRACKET,  // ?[
+    
     // Special
     NEWLINE,    // \n
     INDENT,     // indentation

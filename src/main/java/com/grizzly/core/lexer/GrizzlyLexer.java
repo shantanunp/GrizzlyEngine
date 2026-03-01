@@ -753,6 +753,7 @@ public class GrizzlyLexer {
             case '!' -> tokenizeNotEquals();
             case '<' -> tokenizeLessThan();
             case '>' -> tokenizeGreaterThan();
+            case '?' -> tokenizeQuestion();
             default -> throw error("Unexpected character '" + c + "'");
         }
     }
@@ -802,6 +803,30 @@ public class GrizzlyLexer {
             addTokenAndAdvance(TokenType.GE);
         } else {
             addToken(TokenType.GT);
+        }
+    }
+    
+    /**
+     * Tokenize safe navigation operators: ?. or ?[
+     * 
+     * <p>These operators enable safe property access that returns null
+     * instead of throwing an exception when the object is null.
+     * 
+     * <p>Examples:
+     * <pre>{@code
+     * INPUT?.deal?.loan?.city     // Safe attribute access
+     * INPUT?["key"]?[0]           // Safe index/key access
+     * }</pre>
+     */
+    private void tokenizeQuestion() {
+        advance(); // consume '?'
+        char next = currentChar();
+        if (next == '.') {
+            addTokenAndAdvance(TokenType.SAFE_DOT);
+        } else if (next == '[') {
+            addTokenAndAdvance(TokenType.SAFE_LBRACKET);
+        } else {
+            throw error("Expected '.' or '[' after '?' for safe navigation, got '" + next + "'");
         }
     }
     

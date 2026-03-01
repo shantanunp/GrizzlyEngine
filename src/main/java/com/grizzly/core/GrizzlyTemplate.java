@@ -5,6 +5,9 @@ import com.grizzly.core.interpreter.InterpreterConfig;
 import com.grizzly.core.parser.ast.Program;
 import com.grizzly.core.types.DictValue;
 import com.grizzly.core.types.ValueConverter;
+import com.grizzly.core.validation.AccessTracker;
+import com.grizzly.core.validation.TransformationResult;
+import com.grizzly.core.validation.ValidationReport;
 
 import java.util.Map;
 import java.util.Objects;
@@ -100,6 +103,59 @@ public class GrizzlyTemplate {
         DictValue input = ValueConverter.fromJavaMap(inputMap);
         DictValue output = interpreter.executeTyped(input);
         return ValueConverter.toJavaMap(output);
+    }
+    
+    /**
+     * Execute the template with validation, returning detailed access tracking.
+     * 
+     * <p>This method records all property accesses during transformation,
+     * allowing you to see which paths failed due to null values and why.
+     * 
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * TransformationResult result = template.executeWithValidation(input);
+     * 
+     * DictValue output = result.output();
+     * 
+     * if (result.hasErrors()) {
+     *     ValidationReport report = result.validationReport();
+     *     for (AccessRecord error : report.getPathErrors()) {
+     *         log.warn("Path {} broken at {}", error.fullPath(), error.brokenAtSegment());
+     *     }
+     * }
+     * }</pre>
+     * 
+     * @param input Input data as DictValue
+     * @return TransformationResult containing output and validation report
+     * @throws NullPointerException if input is null
+     * @throws com.grizzly.core.exception.GrizzlyExecutionException if transformation fails
+     */
+    public TransformationResult executeWithValidation(DictValue input) {
+        Objects.requireNonNull(input, "input cannot be null");
+        
+        long startTime = System.currentTimeMillis();
+        
+        AccessTracker tracker = new AccessTracker(true);
+        DictValue output = interpreter.executeTyped(input, tracker);
+        
+        long elapsed = System.currentTimeMillis() - startTime;
+        ValidationReport report = tracker.generateReport();
+        
+        return new TransformationResult(output, report, elapsed);
+    }
+    
+    /**
+     * Execute the template with validation using Java Map input.
+     * 
+     * @param inputMap Input data as a Map
+     * @return TransformationResult containing output and validation report
+     * @throws NullPointerException if inputMap is null
+     * @throws com.grizzly.core.exception.GrizzlyExecutionException if transformation fails
+     */
+    public TransformationResult executeWithValidation(Map<String, Object> inputMap) {
+        Objects.requireNonNull(inputMap, "inputMap cannot be null");
+        DictValue input = ValueConverter.fromJavaMap(inputMap);
+        return executeWithValidation(input);
     }
     
     /**

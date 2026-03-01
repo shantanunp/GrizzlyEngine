@@ -72,6 +72,15 @@ public class GrizzlyEngine {
     }
     
     /**
+     * Create a new engine with custom configuration (caching enabled).
+     * 
+     * @param config Interpreter configuration for all templates
+     */
+    public GrizzlyEngine(InterpreterConfig config) {
+        this(true, config);
+    }
+    
+    /**
      * Create a new engine with custom configuration.
      * 
      * @param enableCaching Whether to cache compiled templates
