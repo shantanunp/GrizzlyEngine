@@ -9,6 +9,7 @@ A lightweight Python-like template engine for JSON-to-JSON data transformation i
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [MISMO Loan Example](#mismo-loan-example)
 - [Safe Navigation Operators](#safe-navigation-operators)
 - [Null Handling Modes](#null-handling-modes)
 - [Access Tracking & Validation](#access-tracking--validation)
@@ -59,6 +60,12 @@ String input = "{\"firstName\": \"John\", \"lastName\": \"Doe\", \"age\": 30}";
 String output = template.transform(input);
 // Output: {"fullName": "John Doe", "age": 30}
 ```
+
+---
+
+## MISMO Loan Example
+
+A full **deal → loan → borrower, address, property, assets, credit** example with input schema, sample payloads (including nulls/arrays), Grizzly template, and output schema is in [docs/mismo-loan-example.md](docs/mismo-loan-example.md). It demonstrates safe navigation, loops, conditionals, and validation. A runnable test is in `MismoLoanExampleTest`.
 
 ---
 
