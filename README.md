@@ -2,6 +2,8 @@
 
 A lightweight Python-like template engine for JSON-to-JSON data transformation in Java.
 
+**Requirements:** Java 21+
+
 ## Quick Start
 
 ### Installation
@@ -59,6 +61,142 @@ Map<String, Object> output = template.executeRaw(input);
 DictValue input = ValueConverter.fromJavaMap(inputMap);
 DictValue output = template.execute(input);
 ```
+
+---
+
+## Safe Navigation Operators
+
+GrizzlyEngine extends Python syntax with safe navigation operators (`?.` and `?[`) to handle null values gracefully in nested data structures.
+
+### Problem: Null in Deep Property Chains
+
+```python
+# Standard access - crashes if any part is null
+city = INPUT["deal"]["loan"]["address"]["city"]  # NullPointerException if loan is null!
+```
+
+### Solution: Safe Navigation
+
+```python
+# Safe attribute access with ?.
+city = INPUT?.deal?.loan?.address?.city  # Returns None if any part is null
+
+# Safe dictionary access with ?[
+city = INPUT?["deal"]?["loan"]?["address"]?["city"]  # Same behavior for dict access
+
+# Mixed safe and regular access
+city = INPUT["deal"]?.loan?.address?["city"]  # Regular access for known fields, safe for optional
+```
+
+### How It Works
+
+| Operator | Description | On Null |
+|----------|-------------|---------|
+| `.` | Regular attribute access | Throws exception (in STRICT mode) or returns null |
+| `?.` | Safe attribute access | Returns `None`, no exception |
+| `[key]` | Regular dictionary access | Throws exception or returns null |
+| `?[key]` | Safe dictionary access | Returns `None`, no exception |
+
+---
+
+## Null Handling Modes
+
+Configure how the engine handles null values during property access:
+
+```java
+import com.grizzly.core.interpreter.InterpreterConfig;
+import com.grizzly.core.validation.NullHandling;
+
+InterpreterConfig config = InterpreterConfig.builder()
+    .nullHandling(NullHandling.SAFE)  // STRICT, SAFE, or SILENT
+    .build();
+
+GrizzlyEngine engine = new GrizzlyEngine(config);
+```
+
+### Mode Comparison
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **STRICT** | Throws exception on null access (unless `?.` used) | Development, testing |
+| **SAFE** | Returns null, tracks all accesses | Production (recommended) |
+| **SILENT** | Returns null, no tracking | High-performance batch processing |
+
+### Quick Configuration
+
+```java
+// Development - fail fast on null
+InterpreterConfig dev = InterpreterConfig.development();
+
+// Production - safe with tracking (default)
+InterpreterConfig prod = InterpreterConfig.defaults();
+
+// High performance - no tracking
+InterpreterConfig fast = InterpreterConfig.highPerformance();
+```
+
+---
+
+## Access Tracking & Validation
+
+Track every property access during transformation to diagnose issues like:
+- Why is a field null in the output?
+- Was it because the input was null, or the key didn't exist?
+- Which paths failed and which succeeded?
+
+### Basic Usage
+
+```java
+import com.grizzly.format.json.JsonTemplate;
+import com.grizzly.format.json.JsonTransformationResult;
+
+JsonTemplate template = JsonTemplate.compile(templateCode);
+JsonTransformationResult result = template.transformWithValidation(jsonInput);
+
+// Get transformed output
+String output = result.outputJson();
+
+// Check validation report
+if (result.validationReport().hasAnyErrors()) {
+    System.err.println("Errors: " + result.validationReport().toJson());
+}
+```
+
+### Validation Report API
+
+```java
+ValidationReport report = result.validationReport();
+
+// Check for specific error types
+report.hasPathErrors();       // Null in path chain
+report.hasKeyNotFoundErrors(); // Missing dictionary key
+report.hasAnyErrors();        // Any error type
+
+// Get detailed records
+report.getPathErrors();       // List of broken path accesses
+report.getKeyNotFoundErrors(); // List of missing key accesses
+report.getExpectedNulls();    // Nulls that used ?. (expected)
+report.getSuccessful();       // All successful accesses
+
+// Get summary
+Map<String, Integer> summary = report.getSummary();
+// {total=15, successful=12, pathErrors=2, keyNotFound=1, ...}
+
+// Export as JSON
+String json = report.toJson();
+```
+
+### Access Status Types
+
+| Status | Meaning |
+|--------|---------|
+| `SUCCESS` | Path resolved to a value |
+| `PATH_BROKEN` | Null encountered in path chain |
+| `KEY_NOT_FOUND` | Dictionary key doesn't exist |
+| `INDEX_OUT_OF_BOUNDS` | List index out of range |
+| `VALUE_NULL` | Path resolved but value is null |
+| `VALUE_EMPTY` | Path resolved but value is empty |
+| `EXPECTED_NULL` | Used `?.` and got null (expected) |
 
 ---
 
@@ -280,7 +418,14 @@ com.grizzly/
 │   ├── lexer/               # Tokenization
 │   ├── parser/              # AST generation
 │   ├── interpreter/         # AST execution
-│   ├── types/               # Value hierarchy
+│   ├── types/               # Value hierarchy (StringValue, DictValue, etc.)
+│   ├── validation/          # Access tracking & null handling
+│   │   ├── NullHandling     # STRICT, SAFE, SILENT modes
+│   │   ├── AccessTracker    # Records property accesses
+│   │   ├── AccessRecord     # Single access event
+│   │   ├── AccessStatus     # SUCCESS, PATH_BROKEN, etc.
+│   │   ├── ValidationReport # Aggregates access records
+│   │   └── TransformationResult # Output + validation report
 │   ├── exception/           # Custom exceptions
 │   └── logging/             # SLF4J logging
 ├── format/                  # Format handlers
@@ -290,7 +435,8 @@ com.grizzly/
 │   └── json/
 │       ├── JsonReader       # JSON → DictValue
 │       ├── JsonWriter       # DictValue → JSON
-│       └── JsonTemplate     # Convenience wrapper
+│       ├── JsonTemplate     # Convenience wrapper
+│       └── JsonTransformationResult # JSON output + validation
 └── mapper/
     └── PojoMapper           # POJO ↔ Map conversion
 ```
@@ -307,10 +453,12 @@ import com.grizzly.core.interpreter.InterpreterConfig;
 InterpreterConfig config = InterpreterConfig.builder()
     .maxLoopIterations(10_000)    // Prevent infinite loops
     .maxRecursionDepth(100)       // Prevent stack overflow
-    .executionTimeout(30_000)     // 30 second timeout
+    .executionTimeout(Duration.ofSeconds(30))  // Timeout
+    .nullHandling(NullHandling.SAFE)  // Never crash on null
+    .trackAccess(true)            // Enable validation reports
     .build();
 
-GrizzlyEngine engine = new GrizzlyEngine(true, config);
+GrizzlyEngine engine = new GrizzlyEngine(config);
 ```
 
 ---
@@ -331,6 +479,23 @@ try {
     System.err.println("Format error: " + e.getMessage());
 }
 ```
+
+---
+
+## Python Compatibility Note
+
+GrizzlyEngine uses **Python-like** syntax with some extensions for JSON transformations:
+
+| Feature | Python | GrizzlyEngine |
+|---------|--------|---------------|
+| Basic syntax | ✓ | ✓ |
+| Safe navigation (`?.`, `?[`) | ✗ | ✓ (extension) |
+| Dict literals | ✓ | ✓ |
+| List comprehensions | ✓ | ✗ |
+| Classes | ✓ | ✗ |
+| Imports | Limited | Partial |
+
+The safe navigation operators (`?.`, `?[`) are **not standard Python** but are commonly used in languages like Kotlin, C#, and JavaScript. They are added to GrizzlyEngine for ergonomic null handling in JSON transformation use cases.
 
 ---
 

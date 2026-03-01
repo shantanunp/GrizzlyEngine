@@ -52,6 +52,17 @@ public record InterpreterConfig(
     boolean trackAccess
 ) {
     
+    /**
+     * @deprecated Use {@link #nullHandling()} instead. 
+     * The strictMode field is kept for backward compatibility only.
+     * Use {@code nullHandling() == NullHandling.STRICT} to check strict mode.
+     */
+    @Deprecated
+    @Override
+    public boolean strictMode() {
+        return strictMode;
+    }
+    
     /** Default max iterations per loop (1 million) */
     public static final int DEFAULT_MAX_LOOP_ITERATIONS = 1_000_000;
     

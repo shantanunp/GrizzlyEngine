@@ -37,8 +37,12 @@ public class ValidationReport {
     
     /**
      * Create a validation report from access records.
+     * 
+     * @param records The list of access records (must not be null)
+     * @throws NullPointerException if records is null
      */
     public ValidationReport(List<AccessRecord> records) {
+        java.util.Objects.requireNonNull(records, "records cannot be null");
         this.allRecords = new ArrayList<>(records);
     }
     

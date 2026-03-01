@@ -413,7 +413,7 @@ public class GrizzlyInterpreter {
             );
         }
         
-        ExecutionContext funcContext = new ExecutionContext();
+        ExecutionContext funcContext = context.createChild();
         for (int i = 0; i < func.params().size(); i++) {
             Value argValue = evaluateExpression(argExprs.get(i), context);
             funcContext.set(func.params().get(i), argValue);
