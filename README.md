@@ -4,6 +4,22 @@ A lightweight Python-like template engine for JSON-to-JSON data transformation i
 
 **Requirements:** Java 17+
 
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Safe Navigation Operators](#safe-navigation-operators)
+- [Null Handling Modes](#null-handling-modes)
+- [Access Tracking & Validation](#access-tracking--validation)
+- [Template Syntax](#template-syntax)
+- [API Reference](#api-reference)
+- [Logging](#logging)
+- [Architecture](#architecture)
+- [Error Handling](#error-handling)
+
+---
+
 ## Quick Start
 
 ### Installation
@@ -44,24 +60,6 @@ String output = template.transform(input);
 // Output: {"fullName": "John Doe", "age": 30}
 ```
 
-### Using Core API (for advanced usage)
-
-```java
-import com.grizzly.core.GrizzlyEngine;
-import com.grizzly.core.GrizzlyTemplate;
-
-GrizzlyEngine engine = new GrizzlyEngine();
-GrizzlyTemplate template = engine.compile(templateCode);
-
-// With Java Map
-Map<String, Object> input = Map.of("firstName", "John", "lastName", "Doe");
-Map<String, Object> output = template.executeRaw(input);
-
-// With type-safe DictValue
-DictValue input = ValueConverter.fromJavaMap(inputMap);
-DictValue output = template.execute(input);
-```
-
 ---
 
 ## Safe Navigation Operators
@@ -72,7 +70,7 @@ GrizzlyEngine extends Python syntax with safe navigation operators (`?.` and `?[
 
 ```python
 # Standard access - crashes if any part is null
-city = INPUT["deal"]["loan"]["address"]["city"]  # NullPointerException if loan is null!
+city = INPUT["deal"]["loan"]["address"]["city"]  # Throws exception if loan is null!
 ```
 
 ### Solution: Safe Navigation
@@ -88,7 +86,7 @@ city = INPUT?["deal"]?["loan"]?["address"]?["city"]  # Same behavior for dict ac
 city = INPUT["deal"]?.loan?.address?["city"]  # Regular access for known fields, safe for optional
 ```
 
-### How It Works
+### Operator Reference
 
 | Operator | Description | On Null |
 |----------|-------------|---------|
@@ -101,18 +99,7 @@ city = INPUT["deal"]?.loan?.address?["city"]  # Regular access for known fields,
 
 ## Null Handling Modes
 
-Configure how the engine handles null values during property access:
-
-```java
-import com.grizzly.core.interpreter.InterpreterConfig;
-import com.grizzly.core.validation.NullHandling;
-
-InterpreterConfig config = InterpreterConfig.builder()
-    .nullHandling(NullHandling.SAFE)  // STRICT, SAFE, or SILENT
-    .build();
-
-GrizzlyEngine engine = new GrizzlyEngine(config);
-```
+Configure how the engine handles null values during property access.
 
 ### Mode Comparison
 
@@ -122,17 +109,28 @@ GrizzlyEngine engine = new GrizzlyEngine(config);
 | **SAFE** | Returns null, tracks all accesses | Production (recommended) |
 | **SILENT** | Returns null, no tracking | High-performance batch processing |
 
-### Quick Configuration
+### Configuration
 
 ```java
-// Development - fail fast on null
-InterpreterConfig dev = InterpreterConfig.development();
+import com.grizzly.core.interpreter.InterpreterConfig;
+import com.grizzly.core.validation.NullHandling;
 
-// Production - safe with tracking (default)
-InterpreterConfig prod = InterpreterConfig.defaults();
+// Option 1: Use preset configurations
+InterpreterConfig dev = InterpreterConfig.development();     // STRICT mode
+InterpreterConfig prod = InterpreterConfig.defaults();       // SAFE mode (default)
+InterpreterConfig fast = InterpreterConfig.highPerformance(); // SILENT mode
 
-// High performance - no tracking
-InterpreterConfig fast = InterpreterConfig.highPerformance();
+// Option 2: Custom configuration with builder
+InterpreterConfig config = InterpreterConfig.builder()
+    .nullHandling(NullHandling.SAFE)
+    .trackAccess(true)
+    .maxLoopIterations(10_000)
+    .maxRecursionDepth(100)
+    .executionTimeout(Duration.ofSeconds(30))
+    .build();
+
+// Create engine with config
+GrizzlyEngine engine = new GrizzlyEngine(config);
 ```
 
 ---
@@ -157,30 +155,37 @@ JsonTransformationResult result = template.transformWithValidation(jsonInput);
 String output = result.outputJson();
 
 // Check validation report
-if (result.validationReport().hasAnyErrors()) {
+if (result.hasPathErrors()) {
     System.err.println("Errors: " + result.validationReport().toJson());
 }
 ```
 
-### Validation Report API
+### ValidationReport API
 
 ```java
 ValidationReport report = result.validationReport();
 
 // Check for specific error types
-report.hasPathErrors();       // Null in path chain
+report.hasPathErrors();        // Null in path chain
 report.hasKeyNotFoundErrors(); // Missing dictionary key
-report.hasAnyErrors();        // Any error type
+report.hasAnyErrors();         // Any error type
+report.isClean();              // No errors at all
 
 // Get detailed records
-report.getPathErrors();       // List of broken path accesses
+report.getPathErrors();        // List of broken path accesses
 report.getKeyNotFoundErrors(); // List of missing key accesses
-report.getExpectedNulls();    // Nulls that used ?. (expected)
-report.getSuccessful();       // All successful accesses
+report.getExpectedNulls();     // Nulls that used ?. (expected)
+report.getSuccessful();        // All successful accesses
+report.getAllErrors();         // All error records
+report.getAllRecords();        // All access records
 
 // Get summary
 Map<String, Integer> summary = report.getSummary();
 // {total=15, successful=12, pathErrors=2, keyNotFound=1, ...}
+
+// Grouping
+Map<String, List<AccessRecord>> bySegment = report.groupByBrokenSegment();
+Map<Integer, List<AccessRecord>> byLine = report.groupByLineNumber();
 
 // Export as JSON
 String json = report.toJson();
@@ -197,93 +202,6 @@ String json = report.toJson();
 | `VALUE_NULL` | Path resolved but value is null |
 | `VALUE_EMPTY` | Path resolved but value is empty |
 | `EXPECTED_NULL` | Used `?.` and got null (expected) |
-
----
-
-## Logging
-
-Grizzly Engine uses SLF4J for logging. To see logs, add an SLF4J implementation to your project.
-
-### Option 1: SLF4J Simple (quick setup)
-
-```gradle
-dependencies {
-    implementation 'com.grizzly:grizzly-engine:1.0.0'
-    runtimeOnly 'org.slf4j:slf4j-simple:2.0.11'
-}
-```
-
-Configure via system property or `simplelogger.properties`:
-
-```properties
-# src/main/resources/simplelogger.properties
-org.slf4j.simpleLogger.defaultLogLevel=INFO
-org.slf4j.simpleLogger.log.com.grizzly.core.logging=DEBUG
-org.slf4j.simpleLogger.showDateTime=true
-org.slf4j.simpleLogger.dateTimeFormat=HH:mm:ss.SSS
-```
-
-Or set via JVM argument:
-```bash
--Dorg.slf4j.simpleLogger.log.com.grizzly.core.logging=DEBUG
-```
-
-### Option 2: Logback (recommended for production)
-
-```gradle
-dependencies {
-    implementation 'com.grizzly:grizzly-engine:1.0.0'
-    implementation 'ch.qos.logback:logback-classic:1.4.14'
-}
-```
-
-Configure `src/main/resources/logback.xml`:
-
-```xml
-<configuration>
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- Grizzly Engine logging -->
-    <logger name="com.grizzly.core.logging" level="DEBUG"/>
-
-    <root level="INFO">
-        <appender-ref ref="STDOUT"/>
-    </root>
-</configuration>
-```
-
-### Option 3: Log4j2
-
-```gradle
-dependencies {
-    implementation 'com.grizzly:grizzly-engine:1.0.0'
-    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl:2.22.1'
-}
-```
-
-### Log Levels
-
-| Level | What it shows |
-|-------|---------------|
-| `ERROR` | Execution errors only |
-| `WARN` | Warnings and errors |
-| `INFO` | Compilation/execution timing |
-| `DEBUG` | Tokens, AST, function calls |
-| `TRACE` | Variable reads/writes, detailed execution |
-
-### No Logging Implementation
-
-If you don't add any SLF4J implementation, you'll see:
-```
-SLF4J: No SLF4J providers were found.
-SLF4J: Defaulting to no-operation (NOP) logger implementation
-```
-
-The engine will still work, just without logs.
 
 ---
 
@@ -351,10 +269,10 @@ for item in items:
 ### String Methods
 
 ```python
-name.upper()      # "JOHN"
-name.lower()      # "john"
-text.strip()      # Remove whitespace
-text.split(",")   # Split to list
+name.upper()           # "JOHN"
+name.lower()           # "john"
+text.strip()           # Remove whitespace
+text.split(",")        # Split to list
 text.replace("a", "b")
 text.startswith("Hello")
 text.endswith("!")
@@ -408,6 +326,240 @@ addYears(dt, 1)
 
 ---
 
+## API Reference
+
+### JsonTemplate (Recommended Entry Point)
+
+```java
+import com.grizzly.format.json.JsonTemplate;
+import com.grizzly.format.json.JsonTransformationResult;
+import com.grizzly.core.interpreter.InterpreterConfig;
+
+// Compile template
+JsonTemplate template = JsonTemplate.compile(templateCode);
+JsonTemplate template = JsonTemplate.compile(templateCode, config);
+
+// Transform JSON string
+String output = template.transform(jsonInput);
+String output = template.transform(inputMap);
+
+// Transform with validation
+JsonTransformationResult result = template.transformWithValidation(jsonInput);
+JsonTransformationResult result = template.transformWithValidation(inputMap);
+
+// JsonTransformationResult methods
+result.outputJson();         // String - transformed JSON
+result.output();             // DictValue - internal representation
+result.validationReport();   // ValidationReport - access tracking
+result.executionTimeMs();    // long - execution time in milliseconds
+result.hasPathErrors();      // boolean - quick check for errors
+```
+
+### GrizzlyEngine (Core API)
+
+```java
+import com.grizzly.core.GrizzlyEngine;
+import com.grizzly.core.GrizzlyTemplate;
+
+// Create engine
+GrizzlyEngine engine = new GrizzlyEngine();                  // Default config
+GrizzlyEngine engine = new GrizzlyEngine(config);            // Custom config
+GrizzlyEngine engine = new GrizzlyEngine(enableCaching);     // With/without cache
+GrizzlyEngine engine = new GrizzlyEngine(enableCaching, config);
+
+// Compile template
+GrizzlyTemplate template = engine.compile(templateCode);
+
+// GrizzlyTemplate methods
+DictValue output = template.execute(inputDictValue);
+Map<String, Object> output = template.executeRaw(inputMap);
+TransformationResult result = template.executeWithValidation(inputDictValue);
+TransformationResult result = template.executeWithValidation(inputMap);
+```
+
+### InterpreterConfig
+
+```java
+import com.grizzly.core.interpreter.InterpreterConfig;
+import com.grizzly.core.validation.NullHandling;
+import java.time.Duration;
+
+// Preset configurations
+InterpreterConfig.defaults();        // SAFE mode, tracking enabled
+InterpreterConfig.development();     // STRICT mode, fail fast
+InterpreterConfig.highPerformance(); // SILENT mode, no tracking
+InterpreterConfig.unlimited();       // No limits (trusted templates)
+
+// Builder
+InterpreterConfig config = InterpreterConfig.builder()
+    .nullHandling(NullHandling.SAFE)      // STRICT, SAFE, or SILENT
+    .trackAccess(true)                    // Enable access tracking
+    .maxLoopIterations(1_000_000)         // Max iterations per loop
+    .maxRecursionDepth(1000)              // Max function recursion depth
+    .executionTimeout(Duration.ofSeconds(30)) // Execution timeout
+    .build();
+
+// Query config
+config.nullHandling();       // NullHandling enum
+config.trackAccess();        // boolean
+config.isTrackingEnabled();  // boolean (considers SILENT mode)
+config.maxLoopIterations();  // int
+config.maxRecursionDepth();  // int
+config.executionTimeout();   // Duration
+```
+
+### ValidationReport
+
+```java
+import com.grizzly.core.validation.ValidationReport;
+import com.grizzly.core.validation.AccessRecord;
+import com.grizzly.core.validation.AccessStatus;
+
+// Query methods
+report.hasPathErrors();         // boolean
+report.hasKeyNotFoundErrors();  // boolean
+report.hasAnyErrors();          // boolean
+report.hasAnyNulls();           // boolean
+report.isClean();               // boolean - no errors
+
+// Get records
+report.getPathErrors();         // List<AccessRecord>
+report.getKeyNotFoundErrors();  // List<AccessRecord>
+report.getIndexErrors();        // List<AccessRecord>
+report.getNullValues();         // List<AccessRecord>
+report.getEmptyValues();        // List<AccessRecord>
+report.getExpectedNulls();      // List<AccessRecord>
+report.getSuccessful();         // List<AccessRecord>
+report.getAllErrors();          // List<AccessRecord>
+report.getAllRecords();         // List<AccessRecord>
+
+// Summary & grouping
+report.getSummary();            // Map<String, Integer>
+report.groupByBrokenSegment();  // Map<String, List<AccessRecord>>
+report.groupByLineNumber();     // Map<Integer, List<AccessRecord>>
+
+// Output
+report.toJson();                // String - JSON representation
+report.toString();              // String - concise summary
+
+// AccessRecord fields
+record.fullPath();              // String - e.g., "INPUT.deal.loan.city"
+record.status();                // AccessStatus enum
+record.brokenAtSegment();       // String - segment where path broke
+record.retrievedValue();        // Value - the retrieved value (if any)
+record.lineNumber();            // int - line number in template
+record.expectedNull();          // boolean - was ?. used?
+record.isError();               // boolean - is this an error status?
+record.isNull();                // boolean - is value null?
+```
+
+### ValueConverter
+
+```java
+import com.grizzly.core.types.ValueConverter;
+import com.grizzly.core.types.DictValue;
+import com.grizzly.core.types.Value;
+
+// Java Map to DictValue
+DictValue dict = ValueConverter.fromJavaMap(javaMap);
+
+// Java object to Value
+Value value = ValueConverter.fromJava(javaObject);
+
+// Value to Java object
+Object obj = ValueConverter.toJava(value);
+
+// DictValue to Java Map
+Map<String, Object> map = ValueConverter.toJavaMap(dictValue);
+```
+
+---
+
+## Logging
+
+Grizzly Engine uses SLF4J for logging. To see logs, add an SLF4J implementation to your project.
+
+### Option 1: SLF4J Simple (quick setup)
+
+```gradle
+dependencies {
+    implementation 'com.grizzly:grizzly-engine:1.0.0'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.11'
+}
+```
+
+Configure via `src/main/resources/simplelogger.properties`:
+
+```properties
+org.slf4j.simpleLogger.defaultLogLevel=INFO
+org.slf4j.simpleLogger.log.com.grizzly.core.logging=DEBUG
+org.slf4j.simpleLogger.showDateTime=true
+org.slf4j.simpleLogger.dateTimeFormat=HH:mm:ss.SSS
+```
+
+Or set via JVM argument:
+```bash
+-Dorg.slf4j.simpleLogger.log.com.grizzly.core.logging=DEBUG
+```
+
+### Option 2: Logback (recommended for production)
+
+```gradle
+dependencies {
+    implementation 'com.grizzly:grizzly-engine:1.0.0'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+}
+```
+
+Configure `src/main/resources/logback.xml`:
+
+```xml
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.grizzly.core.logging" level="DEBUG"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
+```
+
+### Option 3: Log4j2
+
+```gradle
+dependencies {
+    implementation 'com.grizzly:grizzly-engine:1.0.0'
+    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl:2.22.1'
+}
+```
+
+### Log Levels
+
+| Level | What it shows |
+|-------|---------------|
+| `ERROR` | Execution errors only |
+| `WARN` | Warnings and errors |
+| `INFO` | Compilation/execution timing |
+| `DEBUG` | Tokens, AST, function calls |
+| `TRACE` | Variable reads/writes, detailed execution |
+
+### No Logging Implementation
+
+If you don't add any SLF4J implementation:
+```
+SLF4J: No SLF4J providers were found.
+SLF4J: Defaulting to no-operation (NOP) logger implementation
+```
+
+The engine will still work, just without logs.
+
+---
+
 ## Architecture
 
 ```
@@ -418,7 +570,9 @@ com.grizzly/
 │   ├── lexer/               # Tokenization
 │   ├── parser/              # AST generation
 │   ├── interpreter/         # AST execution
+│   │   └── InterpreterConfig # Configuration with safeguards
 │   ├── types/               # Value hierarchy (StringValue, DictValue, etc.)
+│   │   └── ValueConverter   # Java ↔ Value conversion
 │   ├── validation/          # Access tracking & null handling
 │   │   ├── NullHandling     # STRICT, SAFE, SILENT modes
 │   │   ├── AccessTracker    # Records property accesses
@@ -429,13 +583,8 @@ com.grizzly/
 │   ├── exception/           # Custom exceptions
 │   └── logging/             # SLF4J logging
 ├── format/                  # Format handlers
-│   ├── FormatReader         # Interface for reading formats
-│   ├── FormatWriter         # Interface for writing formats
-│   ├── FormatRegistry       # Central registry
 │   └── json/
-│       ├── JsonReader       # JSON → DictValue
-│       ├── JsonWriter       # DictValue → JSON
-│       ├── JsonTemplate     # Convenience wrapper
+│       ├── JsonTemplate     # Main entry point for JSON
 │       └── JsonTransformationResult # JSON output + validation
 └── mapper/
     └── PojoMapper           # POJO ↔ Map conversion
@@ -443,29 +592,13 @@ com.grizzly/
 
 ---
 
-## Production Safeguards
-
-The engine includes built-in safeguards:
-
-```java
-import com.grizzly.core.interpreter.InterpreterConfig;
-
-InterpreterConfig config = InterpreterConfig.builder()
-    .maxLoopIterations(10_000)    // Prevent infinite loops
-    .maxRecursionDepth(100)       // Prevent stack overflow
-    .executionTimeout(Duration.ofSeconds(30))  // Timeout
-    .nullHandling(NullHandling.SAFE)  // Never crash on null
-    .trackAccess(true)            // Enable validation reports
-    .build();
-
-GrizzlyEngine engine = new GrizzlyEngine(config);
-```
-
----
-
 ## Error Handling
 
 ```java
+import com.grizzly.core.exception.GrizzlyParseException;
+import com.grizzly.core.exception.GrizzlyExecutionException;
+import com.grizzly.format.FormatException;
+
 try {
     String output = template.transform(input);
 } catch (GrizzlyParseException e) {
