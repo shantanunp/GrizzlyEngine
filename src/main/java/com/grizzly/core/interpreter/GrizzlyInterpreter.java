@@ -757,10 +757,28 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateBinaryOp(BinaryOp binaryOp, ExecutionContext context) {
+        String operator = binaryOp.operator();
+        
+        // Short-circuit evaluation for 'and' and 'or'
+        if ("and".equals(operator)) {
+            Value left = evaluateExpression(binaryOp.left(), context);
+            if (!left.isTruthy()) {
+                return left; // Short-circuit: return falsy left without evaluating right
+            }
+            return evaluateExpression(binaryOp.right(), context);
+        }
+        
+        if ("or".equals(operator)) {
+            Value left = evaluateExpression(binaryOp.left(), context);
+            if (left.isTruthy()) {
+                return left; // Short-circuit: return truthy left without evaluating right
+            }
+            return evaluateExpression(binaryOp.right(), context);
+        }
+        
+        // For all other operators, evaluate both sides
         Value left = evaluateExpression(binaryOp.left(), context);
         Value right = evaluateExpression(binaryOp.right(), context);
-        
-        String operator = binaryOp.operator();
         
         return switch (operator) {
             case "+" -> evaluatePlus(left, right);
@@ -773,8 +791,6 @@ public class GrizzlyInterpreter {
             case "==" -> BoolValue.of(areEqual(left, right));
             case "!=" -> BoolValue.of(!areEqual(left, right));
             case "<", ">", "<=", ">=" -> BoolValue.of(evaluateComparison(left, right, operator));
-            case "and" -> left.isTruthy() ? right : left;
-            case "or" -> left.isTruthy() ? left : right;
             case "not" -> BoolValue.of(!right.isTruthy());
             case "in" -> BoolValue.of(evaluateIn(left, right));
             case "not in" -> BoolValue.of(!evaluateIn(left, right));

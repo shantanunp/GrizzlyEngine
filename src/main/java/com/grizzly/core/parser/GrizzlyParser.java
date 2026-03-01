@@ -475,7 +475,7 @@ public class GrizzlyParser {
         int lineNumber = peek().line();
         
         expect(TokenType.IF, "Expected 'if'");
-        Expression condition = parseComparison();
+        Expression condition = parseExpression();
         expect(TokenType.COLON, "Expected ':' after if condition");
         skipNewlines();
         
@@ -508,7 +508,7 @@ public class GrizzlyParser {
             int elifLine = peek().line();
             advance(); // consume elif
             
-            Expression elifCondition = parseComparison();
+            Expression elifCondition = parseExpression();
             expect(TokenType.COLON, "Expected ':' after elif condition");
             skipNewlines();
             

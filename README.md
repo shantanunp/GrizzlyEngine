@@ -247,6 +247,24 @@ mixed = ["a", 1, True]
 person = {"name": "John", "age": 30}
 ```
 
+### Operators
+
+```python
+# Arithmetic: +, -, *, /, //, %, **
+# Comparison: ==, !=, <, >, <=, >=
+
+# Logical (with short-circuit evaluation)
+result = a and b   # Returns a if falsy, else b
+result = a or b    # Returns a if truthy, else b
+result = not a     # Returns True if a is falsy
+
+# Membership
+if "key" in myDict:
+    process()
+if item not in myList:
+    skip()
+```
+
 ### Control Flow
 
 ```python
@@ -257,6 +275,16 @@ elif age >= 13:
     status = "teen"
 else:
     status = "child"
+
+# Logical operators in conditions (short-circuit evaluation)
+if items and len(items) > 0:
+    first = items[0]
+
+if a or b:
+    result = "at least one"
+
+if not disabled:
+    run_action()
 
 # For loops
 for item in items:

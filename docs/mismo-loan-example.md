@@ -146,23 +146,20 @@ def transform(INPUT):
     OUTPUT["loanType"] = INPUT?.deal?.loan?.loanType
     
     # --- Primary and co-borrowers (array iteration) ---
+    # Using 'and' in if condition with short-circuit evaluation
     borrowers = INPUT?.deal?.loan?.borrowers
-    if borrowers:
-        if len(borrowers) > 0:
-            OUTPUT["primaryBorrower"] = {}
-            OUTPUT["primaryBorrower"]["fullName"] = borrowers[0]["firstName"] + " " + borrowers[0]["lastName"]
-            OUTPUT["primaryBorrower"]["income"] = borrowers[0]["income"]
-            OUTPUT["primaryBorrower"]["role"] = borrowers[0]["role"]
-            
-            OUTPUT["coBorrowers"] = []
-            for i in range(1, len(borrowers)):
-                co = {}
-                co["fullName"] = borrowers[i]["firstName"] + " " + borrowers[i]["lastName"]
-                co["income"] = borrowers[i]["income"]
-                OUTPUT["coBorrowers"].append(co)
-        else:
-            OUTPUT["primaryBorrower"] = None
-            OUTPUT["coBorrowers"] = []
+    if borrowers and len(borrowers) > 0:
+        OUTPUT["primaryBorrower"] = {}
+        OUTPUT["primaryBorrower"]["fullName"] = borrowers[0]["firstName"] + " " + borrowers[0]["lastName"]
+        OUTPUT["primaryBorrower"]["income"] = borrowers[0]["income"]
+        OUTPUT["primaryBorrower"]["role"] = borrowers[0]["role"]
+        
+        OUTPUT["coBorrowers"] = []
+        for i in range(1, len(borrowers)):
+            co = {}
+            co["fullName"] = borrowers[i]["firstName"] + " " + borrowers[i]["lastName"]
+            co["income"] = borrowers[i]["income"]
+            OUTPUT["coBorrowers"].append(co)
     else:
         OUTPUT["primaryBorrower"] = None
         OUTPUT["coBorrowers"] = []

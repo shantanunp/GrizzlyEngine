@@ -26,22 +26,18 @@ class MismoLoanExampleTest {
             OUTPUT["loanType"] = INPUT?.deal?.loan?.loanType
             
             borrowers = INPUT?.deal?.loan?.borrowers
-            if borrowers:
-                if len(borrowers) > 0:
-                    OUTPUT["primaryBorrower"] = {}
-                    OUTPUT["primaryBorrower"]["fullName"] = borrowers[0]["firstName"] + " " + borrowers[0]["lastName"]
-                    OUTPUT["primaryBorrower"]["income"] = borrowers[0]["income"]
-                    OUTPUT["primaryBorrower"]["role"] = borrowers[0]["role"]
-                    
-                    OUTPUT["coBorrowers"] = []
-                    for i in range(1, len(borrowers)):
-                        co = {}
-                        co["fullName"] = borrowers[i]["firstName"] + " " + borrowers[i]["lastName"]
-                        co["income"] = borrowers[i]["income"]
-                        OUTPUT["coBorrowers"].append(co)
-                else:
-                    OUTPUT["primaryBorrower"] = None
-                    OUTPUT["coBorrowers"] = []
+            if borrowers and len(borrowers) > 0:
+                OUTPUT["primaryBorrower"] = {}
+                OUTPUT["primaryBorrower"]["fullName"] = borrowers[0]["firstName"] + " " + borrowers[0]["lastName"]
+                OUTPUT["primaryBorrower"]["income"] = borrowers[0]["income"]
+                OUTPUT["primaryBorrower"]["role"] = borrowers[0]["role"]
+
+                OUTPUT["coBorrowers"] = []
+                for i in range(1, len(borrowers)):
+                    co = {}
+                    co["fullName"] = borrowers[i]["firstName"] + " " + borrowers[i]["lastName"]
+                    co["income"] = borrowers[i]["income"]
+                    OUTPUT["coBorrowers"].append(co)
             else:
                 OUTPUT["primaryBorrower"] = None
                 OUTPUT["coBorrowers"] = []
