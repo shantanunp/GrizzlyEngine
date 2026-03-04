@@ -153,9 +153,9 @@ class GrizzlyLexerTest {
     }
     
     @Test
-    void shouldHandleLegacyMacCrLineEndings() {
-        // Old Mac-style \r only
-        String code = "x = 1\r y = 2";
+    void shouldHandleWindowsEndings() {
+        // windows
+        String code = "x = 1\r\n y = 2";
         
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();
