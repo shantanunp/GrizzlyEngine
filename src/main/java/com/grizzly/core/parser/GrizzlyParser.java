@@ -1125,7 +1125,7 @@ public class GrizzlyParser {
         Expression first = parseExpression();
         skipNewlinesAndIndentDedent();
         
-        // List comprehension: [ expr for var in iterable ]
+        // List comprehension: [ expr for var in iterable ] or [ expr for var in iterable if condition ]
         if (peek().type() == TokenType.FOR) {
             advance();
             skipNewlinesAndIndentDedent();
@@ -1135,8 +1135,15 @@ public class GrizzlyParser {
             skipNewlinesAndIndentDedent();
             Expression iterable = parseOr();
             skipNewlinesAndIndentDedent();
+            Expression condition = null;
+            if (peek().type() == TokenType.IF) {
+                advance();
+                skipNewlinesAndIndentDedent();
+                condition = parseOr();
+                skipNewlinesAndIndentDedent();
+            }
             expect(TokenType.RBRACKET, "Expected ']' after list comprehension");
-            return new ListComprehension(first, variable, iterable);
+            return new ListComprehension(first, variable, iterable, condition);
         }
         
         List<Expression> elements = new ArrayList<>();
@@ -1156,24 +1163,56 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse a dict literal: {} or {"key": value, ...}
+     * Parse a dict literal: {} or {"key": value, ...} or dict comprehension { k: v for var in iterable }
      */
-    private DictLiteral parseDictLiteral() {
+    private Expression parseDictLiteral() {
         expect(TokenType.LBRACE, "Expected '{'");
         skipNewlinesAndIndentDedent();
         
-        List<DictLiteral.Entry> entries = new ArrayList<>();
+        if (peek().type() == TokenType.RBRACE) {
+            advance();
+            return DictLiteral.empty();
+        }
         
-        while (peek().type() != TokenType.RBRACE) {
+        Expression key = parseExpression();
+        expect(TokenType.COLON, "Expected ':' after dict key");
+        Expression value = parseExpression();
+        skipNewlinesAndIndentDedent();
+        
+        // Dict comprehension: { key: value for var in iterable } or with "if condition"
+        if (peek().type() == TokenType.FOR) {
+            advance();
             skipNewlinesAndIndentDedent();
-            Expression key = parseExpression();
-            expect(TokenType.COLON, "Expected ':' after dict key");
-            Expression value = parseExpression();
-            entries.add(new DictLiteral.Entry(key, value));
+            String variable = expect(TokenType.IDENTIFIER, "Expected variable name after 'for'").value();
+            skipNewlinesAndIndentDedent();
+            expect(TokenType.IN, "Expected 'in' in dict comprehension");
+            skipNewlinesAndIndentDedent();
+            Expression iterable = parseOr();
+            skipNewlinesAndIndentDedent();
+            Expression condition = null;
+            if (peek().type() == TokenType.IF) {
+                advance();
+                skipNewlinesAndIndentDedent();
+                condition = parseOr();
+                skipNewlinesAndIndentDedent();
+            }
+            expect(TokenType.RBRACE, "Expected '}' after dict comprehension");
+            return new DictComprehension(key, value, variable, iterable, condition);
+        }
+        
+        List<DictLiteral.Entry> entries = new ArrayList<>();
+        entries.add(new DictLiteral.Entry(key, value));
+        while (peek().type() != TokenType.RBRACE) {
             skipNewlinesAndIndentDedent();
             if (peek().type() == TokenType.COMMA) {
                 advance();
+                skipNewlinesAndIndentDedent();
             }
+            key = parseExpression();
+            expect(TokenType.COLON, "Expected ':' after dict key");
+            value = parseExpression();
+            entries.add(new DictLiteral.Entry(key, value));
+            skipNewlinesAndIndentDedent();
         }
         
         expect(TokenType.RBRACE, "Expected '}'");

@@ -539,6 +539,8 @@ public class GrizzlyInterpreter {
                 return context.get(i.name());
             } else if (expr instanceof DictLiteral d) {
                 return evaluateDictLiteral(d, context);
+            } else if (expr instanceof DictComprehension dc) {
+                return evaluateDictComprehension(dc, context);
             } else if (expr instanceof ListLiteral l) {
                 return evaluateListLiteral(l, context);
             } else if (expr instanceof ListComprehension lc) {
@@ -938,6 +940,9 @@ public class GrizzlyInterpreter {
         List<Value> result = new ArrayList<>();
         for (Value item : items) {
             context.set(lc.variable(), item);
+            if (lc.condition() != null && !evaluateExpression(lc.condition(), context).isTruthy()) {
+                continue;
+            }
             result.add(evaluateExpression(lc.element(), context));
         }
         return new ListValue(result);
@@ -952,6 +957,22 @@ public class GrizzlyInterpreter {
             result.put(key, value);
         }
         
+        return result;
+    }
+    
+    private DictValue evaluateDictComprehension(DictComprehension dc, ExecutionContext context) {
+        Value iterableVal = evaluateExpression(dc.iterable(), context);
+        List<Value> items = toIterableList(iterableVal, 0);
+        DictValue result = DictValue.empty();
+        for (Value item : items) {
+            context.set(dc.variable(), item);
+            if (dc.condition() != null && !evaluateExpression(dc.condition(), context).isTruthy()) {
+                continue;
+            }
+            String key = asString(evaluateExpression(dc.keyExpr(), context));
+            Value value = evaluateExpression(dc.valueExpr(), context);
+            result.put(key, value);
+        }
         return result;
     }
     
