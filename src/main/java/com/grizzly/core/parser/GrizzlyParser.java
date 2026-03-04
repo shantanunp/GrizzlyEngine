@@ -1,6 +1,7 @@
 package com.grizzly.core.parser;
 
 import com.grizzly.core.exception.GrizzlyParseException;
+import com.grizzly.core.lexer.GrizzlyLexer;
 import com.grizzly.core.lexer.Token;
 import com.grizzly.core.lexer.TokenType;
 import com.grizzly.core.logging.GrizzlyLogger;
@@ -470,7 +471,7 @@ public class GrizzlyParser {
         int lineNumber = peek().line();
         
         expect(TokenType.IF, "Expected 'if'");
-        Expression condition = parseExpression();
+        Expression condition = parseOr(); // avoid parsing next-line "if" as ternary (e.g. "x \n if y :" in condition)
         expect(TokenType.COLON, "Expected ':' after if condition");
         skipNewlines();
         
@@ -503,7 +504,7 @@ public class GrizzlyParser {
             int elifLine = peek().line();
             advance(); // consume elif
             
-            Expression elifCondition = parseExpression();
+            Expression elifCondition = parseOr(); // same as if: avoid next-line "if" parsed as ternary
             expect(TokenType.COLON, "Expected ':' after elif condition");
             skipNewlines();
             
@@ -627,7 +628,7 @@ public class GrizzlyParser {
         expect(TokenType.FOR, "Expected 'for'");
         String variable = expect(TokenType.IDENTIFIER, "Expected variable name").value();
         expect(TokenType.IN, "Expected 'in'");
-        Expression iterable = parseExpression();
+        Expression iterable = parseOr(); // avoid next-line "if" parsed as ternary (e.g. "for x in list \n if ...")
         expect(TokenType.COLON, "Expected ':' after for statement");
         skipNewlines();
         
@@ -668,8 +669,47 @@ public class GrizzlyParser {
      * 
      * @return Expression AST node with proper precedence
      */
+    /**
+     * Parse a single expression from source (e.g. for f-string interpolation).
+     * @throws GrizzlyParseException if the source is not a valid expression
+     */
+    public static Expression parseExpressionFromSource(String source) {
+        GrizzlyLexer lexer = new GrizzlyLexer(source);
+        List<Token> tokens = lexer.tokenize();
+        GrizzlyParser parser = new GrizzlyParser(tokens);
+        return parser.parseSingleExpression();
+    }
+    
+    /** Public entry to parse one expression (used by parseExpressionFromSource and f-string eval). */
+    public Expression parseSingleExpression() {
+        return parseExpression();
+    }
+    
     private Expression parseExpression() {
-        return parseOr();
+        return parseConditional();
+    }
+    
+    /** Conditional (ternary): or_expr ['if' or_expr 'else' conditional]. If after 'if' condition we see COLON, this is an if-statement body—backtrack and return thenExpr. */
+    private Expression parseConditional() {
+        Expression thenExpr = parseOr();
+        skipNewlines(); // do not skip INDENT: "expr \n indent if" is an if-statement, not ternary
+        if (peek().type() == TokenType.IF) {
+            int savePos = position;
+            advance();
+            skipNewlinesAndIndentDedent();
+            Expression condition = parseOr();
+            skipNewlinesAndIndentDedent();
+            if (peek().type() == TokenType.COLON) {
+                // "expr if condition :" is an if-statement, not ternary
+                position = savePos;
+                return thenExpr;
+            }
+            expect(TokenType.ELSE, "Expected 'else' in conditional expression");
+            skipNewlines();
+            Expression elseExpr = parseConditional();
+            return new ConditionalExpression(thenExpr, condition, elseExpr);
+        }
+        return thenExpr;
     }
     
     private Expression parseOr() {
@@ -677,6 +717,7 @@ public class GrizzlyParser {
         
         while (peek().type() == TokenType.OR) {
             advance();
+            skipNewlinesAndIndentDedent();
             Expression right = parseAnd();
             left = new BinaryOp(left, "or", right);
         }
@@ -689,6 +730,7 @@ public class GrizzlyParser {
         
         while (peek().type() == TokenType.AND) {
             advance();
+            skipNewlinesAndIndentDedent();
             Expression right = parseNot();
             left = new BinaryOp(left, "and", right);
         }
@@ -930,6 +972,12 @@ public class GrizzlyParser {
             return new StringLiteral(token.value());
         }
         
+        // F-string literal: f"..." with {expr} interpolations
+        if (token.type() == TokenType.FSTRING) {
+            advance();
+            return new FStringLiteral(token.value());
+        }
+        
         // Number literal
         if (token.type() == TokenType.NUMBER) {
             advance();
@@ -948,6 +996,16 @@ public class GrizzlyParser {
                     token.column()
                 );
             }
+        }
+        
+        // Grouped expression: ( expression ) — e.g. (a + b), (x if c else y)
+        if (token.type() == TokenType.LPAREN) {
+            advance();
+            skipNewlinesAndIndentDedent();
+            Expression expr = parseExpression();
+            skipNewlinesAndIndentDedent();
+            expect(TokenType.RPAREN, "Expected ')' after grouped expression");
+            return expr;
         }
         
         // Dict literal: {} or {"key": value, ...}
@@ -1055,19 +1113,42 @@ public class GrizzlyParser {
      * @return ListLiteral AST node containing list of element expressions
      * @throws GrizzlyParseException if syntax is invalid
      */
-    private ListLiteral parseListLiteral() {
+    private Expression parseListLiteral() {
         expect(TokenType.LBRACKET, "Expected '['");
         skipNewlinesAndIndentDedent();
         
-        List<Expression> elements = new ArrayList<>();
+        if (peek().type() == TokenType.RBRACKET) {
+            advance();
+            return new ListLiteral(List.of());
+        }
         
-        while (peek().type() != TokenType.RBRACKET) {
+        Expression first = parseExpression();
+        skipNewlinesAndIndentDedent();
+        
+        // List comprehension: [ expr for var in iterable ]
+        if (peek().type() == TokenType.FOR) {
+            advance();
             skipNewlinesAndIndentDedent();
-            elements.add(parseExpression());
+            String variable = expect(TokenType.IDENTIFIER, "Expected variable name after 'for'").value();
+            skipNewlinesAndIndentDedent();
+            expect(TokenType.IN, "Expected 'in' in list comprehension");
+            skipNewlinesAndIndentDedent();
+            Expression iterable = parseOr();
+            skipNewlinesAndIndentDedent();
+            expect(TokenType.RBRACKET, "Expected ']' after list comprehension");
+            return new ListComprehension(first, variable, iterable);
+        }
+        
+        List<Expression> elements = new ArrayList<>();
+        elements.add(first);
+        while (peek().type() != TokenType.RBRACKET) {
             skipNewlinesAndIndentDedent();
             if (peek().type() == TokenType.COMMA) {
                 advance();
+                skipNewlinesAndIndentDedent();
             }
+            elements.add(parseExpression());
+            skipNewlinesAndIndentDedent();
         }
         
         expect(TokenType.RBRACKET, "Expected ']'");

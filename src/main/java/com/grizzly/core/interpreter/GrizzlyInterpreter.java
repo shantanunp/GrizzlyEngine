@@ -2,6 +2,7 @@ package com.grizzly.core.interpreter;
 
 import com.grizzly.core.exception.GrizzlyExecutionException;
 import com.grizzly.core.logging.GrizzlyLogger;
+import com.grizzly.core.parser.GrizzlyParser;
 import com.grizzly.core.parser.ast.*;
 import com.grizzly.core.types.*;
 import com.grizzly.core.validation.*;
@@ -540,6 +541,8 @@ public class GrizzlyInterpreter {
                 return evaluateDictLiteral(d, context);
             } else if (expr instanceof ListLiteral l) {
                 return evaluateListLiteral(l, context);
+            } else if (expr instanceof ListComprehension lc) {
+                return evaluateListComprehension(lc, context);
             } else if (expr instanceof DictAccess d) {
                 return evaluateDictAccess(d, context);
             } else if (expr instanceof AttrAccess a) {
@@ -550,6 +553,10 @@ public class GrizzlyInterpreter {
                 return evaluateMethodCall(m, context);
             } else if (expr instanceof FunctionCallExpression f) {
                 return evaluateFunctionCallExpression(f, context);
+            } else if (expr instanceof ConditionalExpression c) {
+                return evaluateConditionalExpression(c, context);
+            } else if (expr instanceof FStringLiteral f) {
+                return evaluateFStringLiteral(f, context);
             } else {
                 throw new GrizzlyExecutionException(
                     "Unknown expression type: " + expr.getClass().getSimpleName()
@@ -798,6 +805,51 @@ public class GrizzlyInterpreter {
         };
     }
     
+    private Value evaluateConditionalExpression(ConditionalExpression c, ExecutionContext context) {
+        Value cond = evaluateExpression(c.condition(), context);
+        if (cond.isTruthy()) {
+            return evaluateExpression(c.thenExpr(), context);
+        }
+        return evaluateExpression(c.elseExpr(), context);
+    }
+    
+    private Value evaluateFStringLiteral(FStringLiteral f, ExecutionContext context) {
+        String raw = f.value();
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < raw.length()) {
+            int brace = raw.indexOf('{', i);
+            if (brace < 0) {
+                out.append(raw.substring(i));
+                break;
+            }
+            out.append(raw, i, brace);
+            int depth = 1;
+            int j = brace + 1;
+            while (j < raw.length() && depth > 0) {
+                char c = raw.charAt(j);
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+                j++;
+            }
+            if (depth != 0) {
+                throw new GrizzlyExecutionException("Unclosed '{' in f-string");
+            }
+            String exprSource = raw.substring(brace + 1, j - 1).trim();
+            if (!exprSource.isEmpty()) {
+                try {
+                    Expression expr = GrizzlyParser.parseExpressionFromSource(exprSource);
+                    Value val = evaluateExpression(expr, context);
+                    out.append(val != null ? val.toString() : "None");
+                } catch (Exception e) {
+                    throw new GrizzlyExecutionException("F-string interpolation failed: " + e.getMessage());
+                }
+            }
+            i = j;
+        }
+        return new StringValue(out.toString());
+    }
+    
     private boolean evaluateIn(Value left, Value right) {
         if (right instanceof ListValue list) {
             for (Value item : list.items()) {
@@ -877,6 +929,17 @@ public class GrizzlyInterpreter {
             result.add(value);
         }
         
+        return new ListValue(result);
+    }
+    
+    private ListValue evaluateListComprehension(ListComprehension lc, ExecutionContext context) {
+        Value iterableVal = evaluateExpression(lc.iterable(), context);
+        List<Value> items = toIterableList(iterableVal, 0);
+        List<Value> result = new ArrayList<>();
+        for (Value item : items) {
+            context.set(lc.variable(), item);
+            result.add(evaluateExpression(lc.element(), context));
+        }
         return new ListValue(result);
     }
     

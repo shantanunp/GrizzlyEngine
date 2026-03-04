@@ -733,8 +733,36 @@ public class GrizzlyLexer {
             return;
         }
         
+        // Check for f-string prefix: f"..." or f'...'
+        if ((text.equals("f") || text.equals("F")) && !isAtEnd() && isQuote(currentChar())) {
+            tokenizeFString(currentChar());
+            return;
+        }
+        
         TokenType type = KEYWORDS.getOrDefault(text, TokenType.IDENTIFIER);
         addToken(type, text, startColumn);
+    }
+    
+    /**
+     * Tokenize f-string: f"..." or f'...' with {expr} interpolations (content stored as-is).
+     */
+    private void tokenizeFString(char quote) {
+        int startColumn = column;
+        advance(); // skip opening quote
+        StringBuilder content = new StringBuilder();
+        while (!isAtEnd() && currentChar() != quote) {
+            if (currentChar() == '\\') {
+                content.append(handleEscapeSequence());
+            } else {
+                content.append(currentChar());
+                advance();
+            }
+        }
+        if (isAtEnd()) {
+            throw error("Unterminated f-string", startColumn);
+        }
+        advance(); // skip closing quote
+        addToken(TokenType.FSTRING, content.toString(), startColumn);
     }
     
     /**

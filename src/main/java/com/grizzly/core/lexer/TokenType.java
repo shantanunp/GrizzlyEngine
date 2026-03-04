@@ -26,6 +26,7 @@ public enum TokenType {
     // Literals
     IDENTIFIER, // variable names, function names
     STRING,     // "string literal"
+    FSTRING,    // f"format string with {expr}"
     NUMBER,     // 123, 45.67
     
     // Operators
