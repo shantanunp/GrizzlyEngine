@@ -364,6 +364,8 @@ public class GrizzlyInterpreter {
             return executeIf(i, context);
         } else if (stmt instanceof ForLoop forLoop) {
             return executeForLoop(forLoop, context);
+        } else if (stmt instanceof SwitchStatement sw) {
+            return executeSwitch(sw, context);
         } else if (stmt instanceof ExpressionStatement e) {
             return evaluateExpression(e.expression(), context);
         } else if (stmt instanceof BreakStatement) {
@@ -467,6 +469,31 @@ public class GrizzlyInterpreter {
             }
         }
         return NullValue.INSTANCE;
+    }
+    
+    private Value executeSwitch(SwitchStatement sw, ExecutionContext context) {
+        try {
+            Value exprValue = evaluateExpression(sw.expression(), context);
+            for (SwitchStatement.CaseBranch branch : sw.caseBranches()) {
+                Value caseValue = evaluateExpression(branch.value(), context);
+                if (areEqual(exprValue, caseValue)) {
+                    return executeBlock(branch.statements(), context);
+                }
+            }
+            if (sw.defaultBlock() != null && !sw.defaultBlock().isEmpty()) {
+                return executeBlock(sw.defaultBlock(), context);
+            }
+            return NullValue.INSTANCE;
+        } catch (com.grizzly.core.exception.BreakException | com.grizzly.core.exception.ContinueException e) {
+            throw e;
+        } catch (GrizzlyExecutionException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GrizzlyExecutionException(
+                "Error in switch statement: " + e.getMessage(),
+                sw.lineNumber()
+            );
+        }
     }
     
     private Value executeForLoop(ForLoop forLoop, ExecutionContext context) {

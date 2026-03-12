@@ -12,6 +12,9 @@ public enum TokenType {
     RETURN,     // return
     FOR,        // for
     IN,         // in
+    SWITCH,     // switch
+    CASE,       // case
+    DEFAULT,    // default
     BREAK,      // break
     CONTINUE,   // continue
     TRUE,       // True (Python style)

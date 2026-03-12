@@ -394,6 +394,11 @@ public class GrizzlyParser {
             return parseForLoop();
         }
         
+        // Switch statement
+        if (peek().type() == TokenType.SWITCH) {
+            return parseSwitchStatement();
+        }
+        
         // Check for function call (identifier followed by '(')
         if (peek().type() == TokenType.IDENTIFIER) {
             Token identToken = peek();
@@ -651,6 +656,51 @@ public class GrizzlyParser {
         }
         
         return new ForLoop(variable, iterable, body, lineNumber);
+    }
+    
+    /**
+     * Parse switch statement: switch expr: case value: ... default: ...
+     */
+    private SwitchStatement parseSwitchStatement() {
+        int lineNumber = peek().line();
+        expect(TokenType.SWITCH, "Expected 'switch'");
+        Expression expression = parseOr();
+        expect(TokenType.COLON, "Expected ':' after switch expression");
+        skipNewlines();
+        if (peek().type() == TokenType.INDENT) {
+            advance();
+        }
+        skipNewlines();
+        List<SwitchStatement.CaseBranch> caseBranches = new ArrayList<>();
+        while (peek().type() == TokenType.CASE) {
+            advance();
+            Expression caseValue = parseOr();
+            expect(TokenType.COLON, "Expected ':' after case value");
+            skipNewlines();
+            if (peek().type() == TokenType.INDENT) {
+                advance();
+            }
+            List<Statement> caseBlock = parseIndentedBlock(TokenType.CASE, TokenType.DEFAULT);
+            caseBranches.add(new SwitchStatement.CaseBranch(caseValue, caseBlock));
+            if (peek().type() == TokenType.DEDENT) {
+                advance();
+            }
+            skipNewlines();
+        }
+        List<Statement> defaultBlock = null;
+        if (peek().type() == TokenType.DEFAULT) {
+            advance();
+            expect(TokenType.COLON, "Expected ':' after default");
+            skipNewlines();
+            if (peek().type() == TokenType.INDENT) {
+                advance();
+            }
+            defaultBlock = parseIndentedBlock();
+        }
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+        return new SwitchStatement(expression, caseBranches, defaultBlock != null ? defaultBlock : List.of(), lineNumber);
     }
     
     /**

@@ -304,6 +304,15 @@ for item in items:
     if item["stop"]:
         break
     process(item)
+
+# Switch (match expression against case values)
+switch status:
+    case "active":
+        OUTPUT["code"] = 1
+    case "pending":
+        OUTPUT["code"] = 2
+    default:
+        OUTPUT["code"] = 0
 ```
 
 ### String Methods
