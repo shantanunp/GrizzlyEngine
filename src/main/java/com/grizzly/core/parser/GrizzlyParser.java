@@ -399,6 +399,12 @@ public class GrizzlyParser {
             return parseSwitchStatement();
         }
         
+        // Match statement (Python 3.10+ style); "match" is soft keyword only when not followed by "="
+        if (peek().type() == TokenType.IDENTIFIER && "match".equals(peek().value())
+                && peekNext().type() != TokenType.ASSIGN) {
+            return parseMatchStatement();
+        }
+        
         // Check for function call (identifier followed by '(')
         if (peek().type() == TokenType.IDENTIFIER) {
             Token identToken = peek();
@@ -696,6 +702,60 @@ public class GrizzlyParser {
                 advance();
             }
             defaultBlock = parseIndentedBlock();
+        }
+        if (peek().type() == TokenType.DEDENT) {
+            advance();
+        }
+        return new SwitchStatement(expression, caseBranches, defaultBlock != null ? defaultBlock : List.of(), lineNumber);
+    }
+    
+    /**
+     * Parse match statement (Python 3.10+ style): match expr: case value: ... case _: ...
+     * Uses same AST as switch; "case _:" is treated as default.
+     */
+    private SwitchStatement parseMatchStatement() {
+        int lineNumber = peek().line();
+        if (peek().type() != TokenType.IDENTIFIER || !"match".equals(peek().value())) {
+            throw new GrizzlyParseException("Expected 'match'", lineNumber, 1);
+        }
+        advance();
+        Expression expression = parseOr();
+        expect(TokenType.COLON, "Expected ':' after match expression");
+        skipNewlines();
+        if (peek().type() == TokenType.INDENT) {
+            advance();
+        }
+        skipNewlines();
+        List<SwitchStatement.CaseBranch> caseBranches = new ArrayList<>();
+        List<Statement> defaultBlock = null;
+        while (peek().type() == TokenType.CASE) {
+            advance();
+            // case _: is the default (wildcard) in Python-style match
+            if (peek().type() == TokenType.IDENTIFIER && "_".equals(peek().value())) {
+                advance();
+                expect(TokenType.COLON, "Expected ':' after case _");
+                skipNewlines();
+                if (peek().type() == TokenType.INDENT) {
+                    advance();
+                }
+                defaultBlock = parseIndentedBlock();
+                if (peek().type() == TokenType.DEDENT) {
+                    advance();
+                }
+                break;
+            }
+            Expression caseValue = parseOr();
+            expect(TokenType.COLON, "Expected ':' after case value");
+            skipNewlines();
+            if (peek().type() == TokenType.INDENT) {
+                advance();
+            }
+            List<Statement> caseBlock = parseIndentedBlock(TokenType.CASE, TokenType.DEFAULT);
+            caseBranches.add(new SwitchStatement.CaseBranch(caseValue, caseBlock));
+            if (peek().type() == TokenType.DEDENT) {
+                advance();
+            }
+            skipNewlines();
         }
         if (peek().type() == TokenType.DEDENT) {
             advance();

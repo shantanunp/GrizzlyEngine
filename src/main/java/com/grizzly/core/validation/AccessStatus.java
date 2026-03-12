@@ -4,7 +4,7 @@ package com.grizzly.core.validation;
  * Status of a property access attempt during transformation.
  * 
  * <p>Used in {@link AccessRecord} to indicate the result of accessing
- * a property path like {@code INPUT.deal.loan.city}.
+ * a property path like {@code INPUT.root.node.field}.
  */
 public enum AccessStatus {
     
@@ -28,8 +28,8 @@ public enum AccessStatus {
     /**
      * Path could not be resolved because null was encountered in the chain.
      * 
-     * <p>Example: {@code INPUT.deal.loan.city} where {@code loan} is null.
-     * The access never reached {@code city}.
+     * <p>Example: {@code INPUT.root.node.field} where {@code node} is null.
+     * The access never reached {@code field}.
      */
     PATH_BROKEN,
     

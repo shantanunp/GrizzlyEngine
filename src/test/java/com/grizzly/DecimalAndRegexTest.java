@@ -368,7 +368,7 @@ public class DecimalAndRegexTest {
     // ═══════════════════════════════════════════════════════════════════════════
     
     @Test
-    @DisplayName("Combined: Validate SSN and calculate loan")
+    @DisplayName("Combined: Validate SSN and calculate total")
     public void testDecimalAndRegexCombined() {
         String template = """
             import re
@@ -385,7 +385,7 @@ public class DecimalAndRegexTest {
                     OUTPUT["error"] = "Invalid SSN"
                     return OUTPUT
                 
-                # Calculate loan with exact precision
+                # Calculate total with exact precision
                 principal = Decimal(INPUT.amount)
                 rate = Decimal("0.05")
                 years = Decimal(INPUT.years)

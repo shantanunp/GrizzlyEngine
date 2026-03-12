@@ -11,8 +11,8 @@ import static com.grizzly.core.logging.GrizzlyLogger.info;
 
 public class MainApplicationTest {
 
-    private static final String INPUT_FILE = "examples/donotcommit-02-input.json";
-    private static final String TEMPLATE_FILE = "examples/donotcommit-02.py";
+    private static final String INPUT_FILE = "examples/input.json";
+    private static final String TEMPLATE_FILE = "examples/transform.py";
 
     @Test
     public void compile_transform() throws IOException {

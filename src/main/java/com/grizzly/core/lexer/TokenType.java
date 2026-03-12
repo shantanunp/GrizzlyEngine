@@ -13,6 +13,7 @@ public enum TokenType {
     FOR,        // for
     IN,         // in
     SWITCH,     // switch
+    MATCH,      // match (Python 3.10+ style)
     CASE,       // case
     DEFAULT,    // default
     BREAK,      // break

@@ -26,18 +26,18 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT?.deal?.loan?.address?.city
+                    OUTPUT["field"] = INPUT?.root?.node?.addr?.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             String output = jsonTemplate.transform(input);
-            assertThat(output).contains("\"city\" : null");
+            assertThat(output).contains("\"field\" : null");
         }
         
         @Test
@@ -46,18 +46,18 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT?.deal?.loan?.city
+                    OUTPUT["field"] = INPUT?.root?.node?.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             
             String input = """
-                {"deal": {"loan": {"city": "New York"}}}
+                {"root": {"node": {"field": "New York"}}}
                 """;
             
             String output = jsonTemplate.transform(input);
-            assertThat(output).contains("\"city\" : \"New York\"");
+            assertThat(output).contains("\"field\" : \"New York\"");
         }
         
         @Test
@@ -158,14 +158,14 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
+                    OUTPUT["field"] = INPUT.root.node.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template, config);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             assertThatThrownBy(() -> jsonTemplate.transform(input))
@@ -182,18 +182,18 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT?.deal?.loan?.city
+                    OUTPUT["field"] = INPUT?.root?.node?.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template, config);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             String output = jsonTemplate.transform(input);
-            assertThat(output).contains("\"city\" : null");
+            assertThat(output).contains("\"field\" : null");
         }
     }
     
@@ -211,18 +211,18 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
+                    OUTPUT["field"] = INPUT.root.node.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template, config);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             String output = jsonTemplate.transform(input);
-            assertThat(output).contains("\"city\" : null");
+            assertThat(output).contains("\"field\" : null");
         }
         
         @Test
@@ -231,14 +231,14 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
+                    OUTPUT["field"] = INPUT.root.node.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);
@@ -262,18 +262,18 @@ class SafeNavigationTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
+                    OUTPUT["field"] = INPUT.root.node.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template, config);
             
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             String output = jsonTemplate.transform(input);
-            assertThat(output).contains("\"city\" : null");
+            assertThat(output).contains("\"field\" : null");
         }
     }
 }

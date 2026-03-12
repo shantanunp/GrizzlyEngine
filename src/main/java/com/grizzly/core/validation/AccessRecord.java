@@ -5,7 +5,7 @@ import com.grizzly.core.types.Value;
 /**
  * Record of a single property access during transformation.
  * 
- * <p>Each time a property is accessed (e.g., {@code INPUT.deal.loan.city}),
+ * <p>Each time a property is accessed (e.g., {@code INPUT.root.node.field}),
  * an AccessRecord is created to track the result. This enables detailed
  * validation reports.
  * 
@@ -22,11 +22,11 @@ import com.grizzly.core.types.Value;
  *     expectedNull: false
  * )
  * 
- * // Broken path (loan was null)
+ * // Broken path (node was null)
  * AccessRecord(
- *     fullPath: "INPUT.deal.loan.city",
+ *     fullPath: "INPUT.root.node.field",
  *     status: PATH_BROKEN,
- *     brokenAtSegment: "loan",
+ *     brokenAtSegment: "node",
  *     retrievedValue: null,
  *     lineNumber: 8,
  *     expectedNull: false
@@ -34,16 +34,16 @@ import com.grizzly.core.types.Value;
  * 
  * // Safe navigation (expected null)
  * AccessRecord(
- *     fullPath: "INPUT?.deal?.loan?.city",
+ *     fullPath: "INPUT?.root?.node?.field",
  *     status: EXPECTED_NULL,
- *     brokenAtSegment: "loan",
+ *     brokenAtSegment: "node",
  *     retrievedValue: null,
  *     lineNumber: 8,
  *     expectedNull: true
  * )
  * }</pre>
  * 
- * @param fullPath        Full access path (e.g., "INPUT.deal.loan.city")
+ * @param fullPath        Full access path (e.g., "INPUT.root.node.field")
  * @param status          Result of the access attempt
  * @param brokenAtSegment Segment where path broke (null if SUCCESS)
  * @param retrievedValue  Value retrieved (null if not SUCCESS)

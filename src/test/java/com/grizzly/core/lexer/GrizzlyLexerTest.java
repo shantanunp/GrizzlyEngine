@@ -96,7 +96,7 @@ class GrizzlyLexerTest {
     
     @Test
     void shouldTokenizeSafeDotOperator() {
-        String code = "x = INPUT?.deal?.loan";
+        String code = "x = INPUT?.root?.node";
         
         GrizzlyLexer lexer = new GrizzlyLexer(code);
         List<Token> tokens = lexer.tokenize();

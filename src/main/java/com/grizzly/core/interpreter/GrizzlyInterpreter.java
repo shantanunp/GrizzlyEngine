@@ -333,13 +333,13 @@ public class GrizzlyInterpreter {
         try {
             for (Statement stmt : function.body()) {
                 Value result = executeStatement(stmt, context);
-                
                 if (stmt instanceof ReturnStatement) {
                     return result;
                 }
             }
-            
             return NullValue.INSTANCE;
+        } catch (com.grizzly.core.exception.ReturnException e) {
+            return e.getValue();
         } finally {
             currentRecursionDepth--;
         }
@@ -357,7 +357,7 @@ public class GrizzlyInterpreter {
         } else if (stmt instanceof Assignment a) {
             return executeAssignment(a, context);
         } else if (stmt instanceof ReturnStatement r) {
-            return evaluateExpression(r.value(), context);
+            throw new com.grizzly.core.exception.ReturnException(evaluateExpression(r.value(), context));
         } else if (stmt instanceof FunctionCall f) {
             return executeFunctionCall(f, context);
         } else if (stmt instanceof IfStatement i) {
@@ -385,6 +385,8 @@ public class GrizzlyInterpreter {
             Value value = evaluateExpression(assignment.value(), context);
             setTarget(assignment.target(), value, context);
             return value;
+        } catch (com.grizzly.core.exception.ReturnException e) {
+            throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -398,6 +400,8 @@ public class GrizzlyInterpreter {
     private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
             return invokeFunction(call.functionName(), call.args(), context, call.lineNumber());
+        } catch (com.grizzly.core.exception.ReturnException e) {
+            throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -449,7 +453,7 @@ public class GrizzlyInterpreter {
             }
             
             return NullValue.INSTANCE;
-        } catch (com.grizzly.core.exception.BreakException | com.grizzly.core.exception.ContinueException e) {
+        } catch (com.grizzly.core.exception.BreakException | com.grizzly.core.exception.ContinueException | com.grizzly.core.exception.ReturnException e) {
             throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
@@ -484,7 +488,7 @@ public class GrizzlyInterpreter {
                 return executeBlock(sw.defaultBlock(), context);
             }
             return NullValue.INSTANCE;
-        } catch (com.grizzly.core.exception.BreakException | com.grizzly.core.exception.ContinueException e) {
+        } catch (com.grizzly.core.exception.BreakException | com.grizzly.core.exception.ContinueException | com.grizzly.core.exception.ReturnException e) {
             throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
@@ -531,6 +535,8 @@ public class GrizzlyInterpreter {
                         break itemLoop;
                     } catch (com.grizzly.core.exception.ContinueException e) {
                         continue itemLoop;
+                    } catch (com.grizzly.core.exception.ReturnException e) {
+                        throw e;
                     }
                 }
             }
@@ -542,6 +548,8 @@ public class GrizzlyInterpreter {
                 "break/continue outside of loop at line " + forLoop.lineNumber(),
                 forLoop.lineNumber()
             );
+        } catch (com.grizzly.core.exception.ReturnException e) {
+            throw e;
         } catch (GrizzlyExecutionException e) {
             throw e;
         } catch (Exception e) {

@@ -48,18 +48,18 @@ class AccessTrackerTest {
         @Test
         @DisplayName("recordPathBroken creates PATH_BROKEN record")
         void recordPathBrokenCreatesPathBrokenRecord() {
-            tracker.recordPathBroken("INPUT.deal.loan.city", "loan", 10, false);
+            tracker.recordPathBroken("INPUT.root.node.field", "node", 10, false);
             
             AccessRecord record = tracker.getRecords().get(0);
             assertThat(record.status()).isEqualTo(AccessStatus.PATH_BROKEN);
-            assertThat(record.brokenAtSegment()).isEqualTo("loan");
+            assertThat(record.brokenAtSegment()).isEqualTo("node");
             assertThat(record.expectedNull()).isFalse();
         }
         
         @Test
         @DisplayName("recordPathBroken with expectedNull creates EXPECTED_NULL record")
         void recordPathBrokenWithExpectedNullCreatesExpectedNullRecord() {
-            tracker.recordPathBroken("INPUT?.deal?.loan?.city", "loan", 10, true);
+            tracker.recordPathBroken("INPUT?.root?.node?.field", "node", 10, true);
             
             AccessRecord record = tracker.getRecords().get(0);
             assertThat(record.status()).isEqualTo(AccessStatus.EXPECTED_NULL);

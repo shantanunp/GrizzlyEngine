@@ -422,8 +422,8 @@ export default function GrizzlyMapper() {
   };
 
   const loadSample = () => {
-    const sampleInput = { customer: { firstName: "string", lastName: "string", email: "string" }, loan: { amount: "number", type: "string" } };
-    const sampleOutput = { CUSTOMER: { FIRST_NAME: "string", LAST_NAME: "string" }, LOAN: { AMOUNT: "number", TYPE: "string" } };
+    const sampleInput = { customer: { firstName: "string", lastName: "string", email: "string" }, data: { amount: "number", type: "string" } };
+    const sampleOutput = { CUSTOMER: { FIRST_NAME: "string", LAST_NAME: "string" }, DATA: { AMOUNT: "number", TYPE: "string" } };
     setInputSchema(sampleInput);
     setOutputSchema(sampleOutput);
     setInputFields(extractFields(sampleInput));

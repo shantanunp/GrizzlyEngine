@@ -68,7 +68,7 @@ public class AccessTracker {
     
     /**
      * Record a broken path (null encountered in chain).
-     * Only records the first null in a chain; downstream nulls (e.g. .address.city after .loan was null)
+     * Only records the first null in a chain; downstream nulls (e.g. .addr.field after .node was null)
      * are not recorded to avoid duplicate noise.
      *
      * @param path         Full path that was attempted

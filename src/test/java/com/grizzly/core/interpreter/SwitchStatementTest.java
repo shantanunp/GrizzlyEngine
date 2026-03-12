@@ -125,4 +125,33 @@ class SwitchStatementTest {
         Map<String, Object> result = compiled.executeRaw(Map.of("k", "b"));
         assertThat(result.get("code")).isEqualTo(-1);
     }
+
+    // --- match / case _ (Python 3.10+ style) ---
+
+    @Test
+    @DisplayName("match with case _ as default (ex1 style)")
+    void matchCaseUnderscoreDefault() throws Exception {
+        String template = """
+            def get_status_message(status_code):
+                match status_code:
+                    case 200:
+                        return "OK"
+                    case 404:
+                        return "Not Found"
+                    case 500:
+                        return "Internal Server Error"
+                    case _:
+                        return "Unknown Status"
+            
+            def transform(INPUT):
+                OUTPUT = {}
+                OUTPUT["msg"] = get_status_message(INPUT["code"])
+                return OUTPUT
+            """;
+        GrizzlyTemplate compiled = engine.compile(template);
+        assertThat(compiled.executeRaw(Map.of("code", 200)).get("msg")).isEqualTo("OK");
+        assertThat(compiled.executeRaw(Map.of("code", 404)).get("msg")).isEqualTo("Not Found");
+        assertThat(compiled.executeRaw(Map.of("code", 500)).get("msg")).isEqualTo("Internal Server Error");
+        assertThat(compiled.executeRaw(Map.of("code", 999)).get("msg")).isEqualTo("Unknown Status");
+    }
 }

@@ -24,13 +24,13 @@ class ValidationReportTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.address.city
+                    OUTPUT["field"] = INPUT.root.node.addr.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);
@@ -43,8 +43,8 @@ class ValidationReportTest {
             
             AccessRecord error = pathErrors.get(0);
             assertThat(error.status()).isEqualTo(AccessStatus.PATH_BROKEN);
-            assertThat(error.fullPath()).contains("loan");
-            assertThat(error.brokenAtSegment()).isEqualTo("INPUT.deal.loan");
+            assertThat(error.fullPath()).contains("node");
+            assertThat(error.brokenAtSegment()).isEqualTo("INPUT.root.node");
             // Only the first null in the chain is recorded (not .address or .city)
             assertThat(pathErrors).hasSize(1);
         }
@@ -55,15 +55,15 @@ class ValidationReportTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
-                    OUTPUT["state"] = INPUT.deal.loan.state
-                    OUTPUT["zip"] = INPUT.deal.loan.zip
+                    OUTPUT["field"] = INPUT.root.node.field
+                    OUTPUT["state"] = INPUT.root.node.state
+                    OUTPUT["zip"] = INPUT.root.node.zip
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);
@@ -83,13 +83,13 @@ class ValidationReportTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT?.deal?.loan?.city
+                    OUTPUT["field"] = INPUT?.root?.node?.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);
@@ -168,13 +168,13 @@ class ValidationReportTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["city"] = INPUT.deal.loan.city
+                    OUTPUT["field"] = INPUT.root.node.field
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             String input = """
-                {"deal": {"loan": null}}
+                {"root": {"node": null}}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);
@@ -197,15 +197,15 @@ class ValidationReportTest {
             String template = """
                 def transform(INPUT):
                     OUTPUT = {}
-                    OUTPUT["a"] = INPUT.deal.loan.a
-                    OUTPUT["b"] = INPUT.deal.loan.b
+                    OUTPUT["a"] = INPUT.root.node.a
+                    OUTPUT["b"] = INPUT.root.node.b
                     OUTPUT["c"] = INPUT.other.c
                     return OUTPUT
                 """;
             
             JsonTemplate jsonTemplate = JsonTemplate.compile(template);
             String input = """
-                {"deal": {"loan": null}, "other": null}
+                {"root": {"node": null}, "other": null}
                 """;
             
             JsonTransformationResult result = jsonTemplate.transformWithValidation(input);

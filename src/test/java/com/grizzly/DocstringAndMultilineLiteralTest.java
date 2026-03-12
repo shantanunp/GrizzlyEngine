@@ -89,12 +89,12 @@ class DocstringAndMultilineLiteralTest {
                             "created": "2026-01-01"
                         }
                     }
-                    OUTPUT["aboutVersions"] = version
+                    OUTPUT["versions"] = version
                     return OUTPUT
                 """;
             JsonTemplate compiled = JsonTemplate.compile(template);
             String out = compiled.transform("{}");
-            assertThat(out).contains("\"aboutVersions\"");
+            assertThat(out).contains("\"versions\"");
             assertThat(out).contains("\"version\"");
             assertThat(out).contains("1.0.0");
             assertThat(out).contains("\"description\"");
@@ -179,11 +179,11 @@ class DocstringAndMultilineLiteralTest {
                     version = {
                         "version": "1.0.0",
                         "description": "Initial release",
-                        "createDatetime": {
+                        "createdAt": {
                             "datetime": "2026-01-01T00:00:00"
                         }
                     }
-                    OUTPUT["aboutVersions"] = version
+                    OUTPUT["versions"] = version
                     return OUTPUT
                 """;
             JsonTemplate compiled = JsonTemplate.compile(template);
@@ -193,10 +193,10 @@ class DocstringAndMultilineLiteralTest {
             assertThat(out).contains("\"profile\"");
             assertThat(out).contains("\"fullName\"");
             assertThat(out).contains("Jane");
-            assertThat(out).contains("\"aboutVersions\"");
+            assertThat(out).contains("\"versions\"");
             assertThat(out).contains("\"version\"");
             assertThat(out).contains("1.0.0");
-            assertThat(out).contains("\"createDatetime\"");
+            assertThat(out).contains("\"createdAt\"");
         }
     }
 }

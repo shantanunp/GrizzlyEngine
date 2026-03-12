@@ -24,7 +24,7 @@
  * 
  * <p>Use {@code ?.} and {@code ?[} for explicit safe navigation:
  * <pre>{@code
- * OUTPUT["city"] = INPUT?.deal?.loan?.address?.city
+ * OUTPUT["field"] = INPUT?.root?.node?.addr?.field
  * OUTPUT["item"] = INPUT?["items"]?[0]
  * }</pre>
  * 

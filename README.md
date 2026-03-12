@@ -9,7 +9,7 @@ A lightweight Python-like template engine for JSON-to-JSON data transformation i
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [MISMO Loan Example](#mismo-loan-example)
+- [Nested Object Example](#nested-object-example)
 - [Safe Navigation Operators](#safe-navigation-operators)
 - [Null Handling Modes](#null-handling-modes)
 - [Access Tracking & Validation](#access-tracking--validation)
@@ -63,9 +63,9 @@ String output = template.transform(input);
 
 ---
 
-## MISMO Loan Example
+## Nested Object Example
 
-A full **deal → loan → borrower, address, property, assets, credit** example with input schema, sample payloads (including nulls/arrays), Grizzly template, and output schema is in [docs/mismo-loan-example.md](docs/mismo-loan-example.md). It demonstrates safe navigation, loops, conditionals, and validation. A runnable test is in `MismoLoanExampleTest`.
+A full **root → node** example with input schema, sample payloads (including nulls/arrays), Grizzly template, and output schema is in [docs/nested-object-example.md](docs/nested-object-example.md). It demonstrates safe navigation, loops, conditionals, and validation. A runnable test is in `NestedObjectExampleTest`.
 
 ---
 
@@ -82,20 +82,20 @@ SafeNavigationTest, ValidationReportTest, AccessTrackerTest, GrizzlyLexerTest
 
 ```python
 # Standard access - crashes if any part is null
-city = INPUT["deal"]["loan"]["address"]["city"]  # Throws exception if loan is null!
+value = INPUT["root"]["node"]["addr"]["field"]  # Throws exception if node is null!
 ```
 
 ### Solution: Safe Navigation
 
 ```python
 # Safe attribute access with ?.
-city = INPUT?.deal?.loan?.address?.city  # Returns None if any part is null
+value = INPUT?.root?.node?.addr?.field  # Returns None if any part is null
 
 # Safe dictionary access with ?[
-city = INPUT?["deal"]?["loan"]?["address"]?["city"]  # Same behavior for dict access
+value = INPUT?["root"]?["node"]?["addr"]?["field"]  # Same behavior for dict access
 
 # Mixed safe and regular access
-city = INPUT["deal"]?.loan?.address?["city"]  # Regular access for known fields, safe for optional
+value = INPUT["root"]?.node?.addr?["field"]  # Regular access for known fields, safe for optional
 ```
 
 ### Operator Reference
@@ -313,7 +313,31 @@ switch status:
         OUTPUT["code"] = 2
     default:
         OUTPUT["code"] = 0
+
+# Match (Python 3.10+ style; case _ is default)
+match status_code:
+    case 200:
+        return "OK"
+    case 404:
+        return "Not Found"
+    case _:
+        return "Unknown Status"
+
+# Dict as switch (ex2): status_map.get(code, "Unknown")
+# List comp with dict.get (ex3): [status_map.get(code, "Unknown") for code in codes]
+# Ternary in comp (ex4): ["Even" if n % 2 == 0 else "Odd" for n in numbers]
 ```
+
+**Conditional assignment with safe navigation** (common in mappings):
+```python
+"lineText": (
+    item?.record?.addr?.lineInternational
+    if (item?.record?.addr?.formatType.upper() == "INTERNATIONAL"
+        and item?.record?.addr?.country.upper() == "US")
+    else f"{item?.record?.addr?.lineText} {item?.record?.addr?.lineTextCity}"
+)
+```
+Ternary (`x if cond else y`), optional chaining (`?.`), and f-strings are supported.
 
 ### String Methods
 
@@ -492,7 +516,7 @@ report.toJson();                // String - JSON representation
 report.toString();              // String - concise summary
 
 // AccessRecord fields
-record.fullPath();              // String - e.g., "INPUT.deal.loan.city"
+record.fullPath();              // String - e.g., "INPUT.root.node.field"
 record.status();                // AccessStatus enum
 record.brokenAtSegment();       // String - segment where path broke
 record.retrievedValue();        // Value - the retrieved value (if any)

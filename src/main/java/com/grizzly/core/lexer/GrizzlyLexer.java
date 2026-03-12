@@ -142,6 +142,7 @@ public class GrizzlyLexer {
         Map.entry("for", TokenType.FOR),
         Map.entry("in", TokenType.IN),
         Map.entry("switch", TokenType.SWITCH),
+        // "match" is not in KEYWORDS: used as soft keyword at statement start only (re.match, match=... stay valid)
         Map.entry("case", TokenType.CASE),
         Map.entry("default", TokenType.DEFAULT),
         Map.entry("break", TokenType.BREAK),
@@ -852,7 +853,7 @@ public class GrizzlyLexer {
      * 
      * <p>Examples:
      * <pre>{@code
-     * INPUT?.deal?.loan?.city     // Safe attribute access
+     * INPUT?.root?.node?.field    // Safe attribute access
      * INPUT?["key"]?[0]           // Safe index/key access
      * }</pre>
      */

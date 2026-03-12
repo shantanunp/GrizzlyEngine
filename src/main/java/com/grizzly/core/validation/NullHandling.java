@@ -22,8 +22,8 @@ public enum NullHandling {
      * explicit opt-in to safe access.
      * 
      * <pre>{@code
-     * INPUT.deal.loan.city      // throws if 'deal' or 'loan' is null
-     * INPUT?.deal?.loan?.city   // returns null safely (explicit opt-in)
+     * INPUT.root.node.field    // throws if 'root' or 'node' is null
+     * INPUT?.root?.node?.field // returns null safely (explicit opt-in)
      * }</pre>
      */
     STRICT,
@@ -35,8 +35,8 @@ public enum NullHandling {
      * The safe navigation operator marks accesses as "expected nullable" in reports.
      * 
      * <pre>{@code
-     * INPUT.deal.loan.city      // returns null if broken, logs PATH_BROKEN
-     * INPUT?.deal?.loan?.city   // returns null if broken, logs EXPECTED_NULL
+     * INPUT.root.node.field    // returns null if broken, logs PATH_BROKEN
+     * INPUT?.root?.node?.field  // returns null if broken, logs EXPECTED_NULL
      * }</pre>
      */
     SAFE,
@@ -48,7 +48,7 @@ public enum NullHandling {
      * reports are not needed.
      * 
      * <pre>{@code
-     * INPUT.deal.loan.city      // returns null if broken, no logging
+     * INPUT.root.node.field    // returns null if broken, no logging
      * }</pre>
      */
     SILENT
