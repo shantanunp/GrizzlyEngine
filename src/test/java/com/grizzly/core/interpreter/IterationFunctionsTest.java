@@ -164,6 +164,41 @@ class IterationFunctionsTest {
     }
 
     @Test
+    @DisplayName("sorted() with reverse=True keyword arg (Python-compliant)")
+    void sortedReverseKeyword() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                items = [3, 1, 4, 1, 5]
+                OUTPUT["sorted"] = sorted(items, reverse=True)
+                return OUTPUT
+            """;
+        
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(new HashMap<>());
+        
+        @SuppressWarnings("unchecked")
+        List<Integer> sortedList = (List<Integer>) result.get("sorted");
+        assertThat(sortedList).containsExactly(5, 4, 3, 1, 1);
+    }
+
+    @Test
+    @DisplayName("print() runs without error and supports sep/end kwargs")
+    void printBuiltin() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                print("hello")
+                print(1, 2, sep="-", end="")
+                OUTPUT["ok"] = True
+                return OUTPUT
+            """;
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> result = compiled.executeRaw(new HashMap<>());
+        assertThat(result.get("ok")).isEqualTo(true);
+    }
+
+    @Test
     @DisplayName("sorted() with mixed types raises TypeError (Python-compliant)")
     void sortedMixedTypes() throws Exception {
         String template = """

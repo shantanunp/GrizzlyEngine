@@ -3,6 +3,7 @@ package com.grizzly.core.types;
 import com.grizzly.core.interpreter.GrizzlyInterpreter.BuiltinFunction;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Wraps a builtin function so it can be stored in context (e.g. from decimal import Decimal).
@@ -20,7 +21,7 @@ public record CallableValue(BuiltinFunction fn) implements Value {
         return true;
     }
 
-    public Value call(List<Value> args) {
-        return fn.apply(args);
+    public Value call(List<Value> args, Map<String, Value> keywordArgs) {
+        return fn.apply(args, keywordArgs != null ? keywordArgs : Map.of());
     }
 }

@@ -3,7 +3,7 @@ package com.grizzly.core.parser.ast;
 import java.util.List;
 
 /**
- * For loop statement: for item in items:
+ * For loop statement: for item in items: or for k, v in items: (tuple unpacking)
  * 
  * Example:
  *   for customer in INPUT.customers:
@@ -35,15 +35,15 @@ import java.util.List;
  *         OUTPUT["all"].append(emp.name)
  * }</pre>
  * 
- * @param variable Name of the loop variable (e.g., "customer")
+ * @param variables Loop variable names (e.g., ["customer"] or ["k", "v"] for tuple unpacking)
  * @param iterable Expression that produces a list to iterate over
  * @param body Statements to execute for each iteration
  * @param lineNumber Source line number for error reporting
  */
 public record ForLoop(
-    String variable,           // Loop variable name (e.g., "customer")
-    Expression iterable,       // Expression to iterate over (e.g., INPUT.customers)
-    List<Statement> body,      // Loop body statements
+    List<String> variables,    // One or more: ["x"] or ["k", "v"] for tuple unpacking
+    Expression iterable,
+    List<Statement> body,
     int lineNumber
 ) implements Statement {
 }

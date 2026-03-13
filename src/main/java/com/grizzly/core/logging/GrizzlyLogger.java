@@ -178,7 +178,7 @@ public class GrizzlyLogger {
                 }
             }
         } else if (stmt instanceof ForLoop f) {
-            debug("PARSER", prefix + "For: " + f.variable() + " in " + 
+            debug("PARSER", prefix + "For: " + String.join(", ", f.variables()) + " in " + 
                 formatExpression(f.iterable()));
             for (int j = 0; j < f.body().size(); j++) {
                 logStatement(f.body().get(j), childPrefix, 

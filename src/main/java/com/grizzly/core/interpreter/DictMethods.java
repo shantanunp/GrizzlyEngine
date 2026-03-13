@@ -45,7 +45,7 @@ public final class DictMethods {
         if (dict.containsKey(methodName)) {
             Value v = dict.get(methodName);
             if (v instanceof CallableValue cv) {
-                return cv.call(args);
+                return cv.call(args, java.util.Map.of());
             }
         }
         throw new GrizzlyExecutionException("Unknown dict method: " + methodName);

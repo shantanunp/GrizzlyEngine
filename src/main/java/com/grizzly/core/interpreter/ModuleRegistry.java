@@ -79,7 +79,7 @@ public final class ModuleRegistry {
         Map<String, BuiltinFunction> re = new HashMap<>();
         
         // re.match() - Match pattern at start of string. Python-compatible: returns Match with .group(), .groups()
-        re.put("match", args -> {
+        re.put("match", (args, kw) -> {
             requireArgCount("re.match()", args, 2);
             String pattern = asString(args.get(0));
             String text = asString(args.get(1));
@@ -105,7 +105,7 @@ public final class ModuleRegistry {
         });
         
         // re.search() - Search for pattern anywhere. Python-compatible: returns Match with .group(), .groups()
-        re.put("search", args -> {
+        re.put("search", (args, kw) -> {
             requireArgCount("re.search()", args, 2);
             String pattern = asString(args.get(0));
             String text = asString(args.get(1));
@@ -131,7 +131,7 @@ public final class ModuleRegistry {
         });
         
         // re.findall() - Python-compliant: returns groups when present
-        re.put("findall", args -> {
+        re.put("findall", (args, kw) -> {
             requireArgCount("re.findall()", args, 2);
             String pattern = asString(args.get(0));
             String text = asString(args.get(1));
@@ -167,7 +167,7 @@ public final class ModuleRegistry {
         });
         
         // re.sub() - Replace pattern matches. Python: \1, \g<1> for backrefs; convert to Java $1
-        re.put("sub", args -> {
+        re.put("sub", (args, kw) -> {
             if (args.size() != 3) {
                 throw new GrizzlyExecutionException(
                     "re.sub() requires 3 arguments: re.sub(pattern, replacement, text)"
@@ -188,7 +188,7 @@ public final class ModuleRegistry {
         });
         
         // re.split() - Split by pattern
-        re.put("split", args -> {
+        re.put("split", (args, kw) -> {
             requireArgCount("re.split()", args, 2);
             String pattern = asString(args.get(0));
             String text = asString(args.get(1));
@@ -267,7 +267,7 @@ public final class ModuleRegistry {
     
     private void registerDatetimeModule() {
         DictValue datetimeClass = DictValue.empty();
-        datetimeClass.put("now", new CallableValue(args -> {
+        datetimeClass.put("now", new CallableValue((args, kw) -> {
             if (args.size() > 1) {
                 throw new GrizzlyExecutionException("datetime.now() takes 0 or 1 argument (timezone)");
             }
@@ -277,7 +277,7 @@ public final class ModuleRegistry {
             String tz = asString(args.get(0));
             return new DateTimeValue(java.time.ZonedDateTime.now(java.time.ZoneId.of(tz)));
         }));
-        datetimeClass.put("strptime", new CallableValue(args -> {
+        datetimeClass.put("strptime", new CallableValue((args, kw) -> {
             requireArgCount("datetime.strptime()", args, 2);
             String s = asString(args.get(0));
             String fmt = pythonToJavaDateFormat(asString(args.get(1)));
@@ -291,7 +291,7 @@ public final class ModuleRegistry {
         }));
         
         DictValue timedeltaClass = DictValue.empty();
-        timedeltaClass.put("__call", new CallableValue(args -> {
+        timedeltaClass.put("__call", new CallableValue((args, kw) -> {
             long days = args.size() > 0 ? toLong(args.get(0)) : 0;
             long seconds = args.size() > 1 ? toLong(args.get(1)) : 0;
             var td = java.time.Duration.ofDays(days).plusSeconds(seconds);
@@ -308,7 +308,7 @@ public final class ModuleRegistry {
     
     private void registerDecimalModule() {
         DictValue decimalMod = DictValue.empty();
-        decimalMod.put("Decimal", new CallableValue(args -> {
+        decimalMod.put("Decimal", new CallableValue((args, kw) -> {
             requireArgCount("Decimal()", args, 1);
             Value v = args.get(0);
             if (v instanceof StringValue s) {

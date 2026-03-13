@@ -2,6 +2,7 @@ package com.grizzly.core.interpreter;
 
 import com.grizzly.core.exception.GrizzlyExecutionException;
 import com.grizzly.core.interpreter.GrizzlyInterpreter.BuiltinFunction;
+import com.grizzly.core.logging.GrizzlyLogger;
 import com.grizzly.core.types.*;
 
 import java.util.HashMap;
@@ -47,7 +48,7 @@ public final class BuiltinRegistry {
     
     private void registerCoreFunctions() {
         // len()
-        functions.put("len", args -> {
+        functions.put("len", (args, kw) -> {
             requireArgCount("len", args, 1);
             Value val = args.get(0);
             
@@ -65,7 +66,7 @@ public final class BuiltinRegistry {
         });
         
         // range()
-        functions.put("range", args -> {
+        functions.put("range", (args, kw) -> {
             requireArgCountRange("range", args, 1, 3);
             
             int start, stop, step;
@@ -104,13 +105,13 @@ public final class BuiltinRegistry {
         });
         
         // str() - Python-compliant: str("hello") → "hello" (no extra quotes)
-        functions.put("str", args -> {
+        functions.put("str", (args, kw) -> {
             requireArgCount("str", args, 1);
             return new StringValue(asString(args.get(0)));
         });
         
         // int() - Python-compliant: int("3.5") raises ValueError (no silent truncation)
-        functions.put("int", args -> {
+        functions.put("int", (args, kw) -> {
             requireArgCount("int", args, 1);
             Value value = args.get(0);
             
@@ -135,7 +136,7 @@ public final class BuiltinRegistry {
         });
         
         // float() - convert to float
-        functions.put("float", args -> {
+        functions.put("float", (args, kw) -> {
             requireArgCount("float", args, 1);
             Value value = args.get(0);
             
@@ -159,13 +160,13 @@ public final class BuiltinRegistry {
         });
         
         // bool() - convert to boolean
-        functions.put("bool", args -> {
+        functions.put("bool", (args, kw) -> {
             requireArgCount("bool", args, 1);
             return BoolValue.of(args.get(0).isTruthy());
         });
         
         // abs() - absolute value
-        functions.put("abs", args -> {
+        functions.put("abs", (args, kw) -> {
             requireArgCount("abs", args, 1);
             Value value = args.get(0);
             
@@ -184,7 +185,7 @@ public final class BuiltinRegistry {
         });
         
         // min() - minimum value
-        functions.put("min", args -> {
+        functions.put("min", (args, kw) -> {
             if (args.isEmpty()) {
                 throw new GrizzlyExecutionException("min() requires at least 1 argument");
             }
@@ -200,7 +201,7 @@ public final class BuiltinRegistry {
         });
         
         // max() - maximum value
-        functions.put("max", args -> {
+        functions.put("max", (args, kw) -> {
             if (args.isEmpty()) {
                 throw new GrizzlyExecutionException("max() requires at least 1 argument");
             }
@@ -216,7 +217,7 @@ public final class BuiltinRegistry {
         });
         
         // sum() - sum of values
-        functions.put("sum", args -> {
+        functions.put("sum", (args, kw) -> {
             requireArgCount("sum", args, 1);
             ListValue list = requireType("sum", args.get(0), ListValue.class, "argument");
             
@@ -236,7 +237,20 @@ public final class BuiltinRegistry {
             }
             return NumberValue.of(sum);
         });
-
+        
+        // print() - Python: print(*values, sep=' ', end='\n'). Logs via GrizzlyLogger.
+        functions.put("print", (args, kw) -> {
+            String sep = kw.containsKey("sep") ? asString(kw.get("sep")) : " ";
+            String end = kw.containsKey("end") ? asString(kw.get("end")) : "\n";
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < args.size(); i++) {
+                if (i > 0) sb.append(sep);
+                sb.append(asString(args.get(i)));
+            }
+            sb.append(end);
+            com.grizzly.core.logging.GrizzlyLogger.info("PRINT", sb.toString());
+            return NullValue.INSTANCE;
+        });
     }
 
     private Value findMin(List<Value> values) {
@@ -263,7 +277,7 @@ public final class BuiltinRegistry {
     
     private void registerIterationFunctions() {
         // enumerate() - returns list of [index, value] pairs
-        functions.put("enumerate", args -> {
+        functions.put("enumerate", (args, kw) -> {
             requireArgCountRange("enumerate", args, 1, 2);
             ListValue list = requireType("enumerate", args.get(0), ListValue.class, "first argument");
             int start = args.size() > 1 ? toInt(args.get(1)) : 0;
@@ -281,7 +295,7 @@ public final class BuiltinRegistry {
         });
         
         // zip() - combine multiple lists into list of tuples
-        functions.put("zip", args -> {
+        functions.put("zip", (args, kw) -> {
             if (args.isEmpty()) {
                 return ListValue.empty();
             }
@@ -306,11 +320,12 @@ public final class BuiltinRegistry {
             return new ListValue(result);
         });
         
-        // sorted() - return a new sorted list (Python-compliant: TypeError for mixed types)
-        functions.put("sorted", args -> {
+        // sorted() - return a new sorted list. Python: sorted(iterable, key=None, reverse=False)
+        functions.put("sorted", (args, kw) -> {
             requireArgCountRange("sorted", args, 1, 2);
             ListValue list = requireType("sorted", args.get(0), ListValue.class, "first argument");
-            boolean reverse = args.size() > 1 && args.get(1).isTruthy();
+            boolean reverse = kw.containsKey("reverse") ? kw.get("reverse").isTruthy()
+                : (args.size() > 1 && args.get(1).isTruthy());
             java.util.List<Value> sorted = new java.util.ArrayList<>(list.items());
             sorted.sort((a, b) -> {
                 int cmp = ValueUtils.compareForSort(a, b);
@@ -320,7 +335,7 @@ public final class BuiltinRegistry {
         });
         
         // reversed() - return a new reversed list
-        functions.put("reversed", args -> {
+        functions.put("reversed", (args, kw) -> {
             requireArgCount("reversed", args, 1);
             ListValue list = requireType("reversed", args.get(0), ListValue.class, "argument");
             
@@ -330,7 +345,7 @@ public final class BuiltinRegistry {
         });
         
         // any() - True if any element is truthy
-        functions.put("any", args -> {
+        functions.put("any", (args, kw) -> {
             requireArgCount("any", args, 1);
             ListValue list = requireType("any", args.get(0), ListValue.class, "argument");
             
@@ -343,7 +358,7 @@ public final class BuiltinRegistry {
         });
         
         // all() - True if all elements are truthy
-        functions.put("all", args -> {
+        functions.put("all", (args, kw) -> {
             requireArgCount("all", args, 1);
             ListValue list = requireType("all", args.get(0), ListValue.class, "argument");
             
@@ -356,7 +371,7 @@ public final class BuiltinRegistry {
         });
         
         // list() - convert to list
-        functions.put("list", args -> {
+        functions.put("list", (args, kw) -> {
             if (args.isEmpty()) {
                 return ListValue.empty();
             }
@@ -385,7 +400,7 @@ public final class BuiltinRegistry {
         });
         
         // dict() - convert to dict or create empty
-        functions.put("dict", args -> {
+        functions.put("dict", (args, kw) -> {
             if (args.isEmpty()) {
                 return DictValue.empty();
             }
@@ -418,13 +433,13 @@ public final class BuiltinRegistry {
         });
         
         // type() - get type name as string
-        functions.put("type", args -> {
+        functions.put("type", (args, kw) -> {
             requireArgCount("type", args, 1);
             return new StringValue(args.get(0).typeName());
         });
         
         // isinstance() - Python-compatible: only str, int, float, bool, list, dict, type(None)
-        functions.put("isinstance", args -> {
+        functions.put("isinstance", (args, kw) -> {
             requireArgCount("isinstance", args, 2);
             Value value = args.get(0);
             String typeName = asString(args.get(1));
@@ -444,7 +459,7 @@ public final class BuiltinRegistry {
         });
         
         // hasattr() - check if dict has key
-        functions.put("hasattr", args -> {
+        functions.put("hasattr", (args, kw) -> {
             requireArgCount("hasattr", args, 2);
             if (!(args.get(0) instanceof DictValue dict)) {
                 return BoolValue.FALSE;
@@ -454,7 +469,7 @@ public final class BuiltinRegistry {
         });
         
         // getattr() - get dict key with optional default
-        functions.put("getattr", args -> {
+        functions.put("getattr", (args, kw) -> {
             requireArgCountRange("getattr", args, 2, 3);
             if (!(args.get(0) instanceof DictValue dict)) {
                 if (args.size() > 2) {
@@ -478,7 +493,7 @@ public final class BuiltinRegistry {
     
     private void registerDateTimeFunctions() {
         // now()
-        functions.put("now", args -> {
+        functions.put("now", (args, kw) -> {
             if (args.size() > 1) {
                 throw new GrizzlyExecutionException(
                     "now() takes 0 or 1 argument (optional timezone), got " + args.size()
@@ -501,7 +516,7 @@ public final class BuiltinRegistry {
         });
         
         // formatDate()
-        functions.put("formatDate", args -> {
+        functions.put("formatDate", (args, kw) -> {
             requireArgCount("formatDate", args, 2);
             DateTimeValue dt = requireType("formatDate", args.get(0), DateTimeValue.class, "first argument");
             String format = asString(args.get(1));
@@ -520,7 +535,7 @@ public final class BuiltinRegistry {
     
     private void registerMathFunctions() {
         // round(number[, ndigits]) - Python-compliant with banker's rounding (HALF_EVEN)
-        functions.put("round", args -> {
+        functions.put("round", (args, kw) -> {
             requireArgCountRange("round", args, 1, 2);
             Value value = args.get(0);
             int ndigits = args.size() > 1 ? toInt(args.get(1)) : 0;

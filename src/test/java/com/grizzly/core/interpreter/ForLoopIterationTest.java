@@ -93,6 +93,54 @@ class ForLoopIterationTest {
     // ==================== Iterate Over Dict (Keys) ====================
     
     @Test
+    @DisplayName("for k, v in items: tuple unpacking in for loop")
+    void tupleUnpackingInForLoop() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                items = [["a", 1], ["b", 2], ["c", 3]]
+                result = {}
+                for k, v in items:
+                    result[k] = v
+                OUTPUT["result"] = result
+                return OUTPUT
+            """;
+        
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> out = compiled.executeRaw(new HashMap<>());
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) out.get("result");
+        assertThat(result).containsExactlyInAnyOrderEntriesOf(
+            Map.of("a", 1, "b", 2, "c", 3)
+        );
+    }
+    
+    @Test
+    @DisplayName("for k, v in dict.items(): unpack dict items")
+    void tupleUnpackingDictItems() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                d = {"x": 10, "y": 20}
+                result = {}
+                for k, v in d.items():
+                    result[k] = v
+                OUTPUT["result"] = result
+                return OUTPUT
+            """;
+        
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> out = compiled.executeRaw(new HashMap<>());
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) out.get("result");
+        assertThat(result).containsExactlyInAnyOrderEntriesOf(
+            Map.of("x", 10, "y", 20)
+        );
+    }
+    
+    @Test
     @DisplayName("for loop iterates over dict keys")
     void iterateDictKeys() throws Exception {
         String template = """

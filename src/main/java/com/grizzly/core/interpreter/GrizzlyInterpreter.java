@@ -8,6 +8,7 @@ import com.grizzly.core.types.*;
 import com.grizzly.core.validation.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -169,10 +170,11 @@ public class GrizzlyInterpreter {
     
     /**
      * Functional interface for built-in functions.
+     * Supports positional and keyword arguments (Python-compliant).
      */
     @FunctionalInterface
     public interface BuiltinFunction {
-        Value apply(List<Value> args);
+        Value apply(List<Value> args, Map<String, Value> keywordArgs);
     }
     
     private final Program program;
@@ -416,7 +418,7 @@ public class GrizzlyInterpreter {
     
     private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
-            return invokeFunction(call.functionName(), call.args(), context, call.lineNumber());
+            return invokeFunction(call.functionName(), call.args(), call.keywordArgs(), context, call.lineNumber());
         } catch (com.grizzly.core.exception.ReturnException e) {
             throw e;
         } catch (GrizzlyExecutionException e) {
@@ -429,16 +431,17 @@ public class GrizzlyInterpreter {
         }
     }
     
-    private Value invokeFunction(String name, List<Expression> argExprs, 
-                                 ExecutionContext context, int lineNumber) {
+    private Value invokeFunction(String name, List<Expression> argExprs,
+                                 Map<String, Expression> kwExprs, ExecutionContext context, int lineNumber) {
+        List<Value> args = evaluateArguments(argExprs, context);
+        Map<String, Value> kw = evaluateKeywordArguments(kwExprs, context);
+        
         Value ctxVal = context.getOrNull(name);
         if (ctxVal instanceof CallableValue cv) {
-            List<Value> args = evaluateArguments(argExprs, context);
-            return cv.call(args);
+            return cv.call(args, kw);
         }
         if (builtins.contains(name)) {
-            List<Value> args = evaluateArguments(argExprs, context);
-            return builtins.get(name).apply(args);
+            return builtins.get(name).apply(args, kw);
         }
         
         FunctionDef func = program.findFunction(name);
@@ -449,13 +452,56 @@ public class GrizzlyInterpreter {
             );
         }
         
+        // Python-compliant: bind positional first, then keyword args
         ExecutionContext funcContext = context.createChild();
-        for (int i = 0; i < func.params().size(); i++) {
-            Value argValue = evaluateExpression(argExprs.get(i), context);
-            funcContext.set(func.params().get(i), argValue);
+        List<String> params = func.params();
+        Map<String, Value> bound = new HashMap<>();
+        
+        for (int i = 0; i < args.size(); i++) {
+            if (i >= params.size()) {
+                throw new GrizzlyExecutionException(
+                    name + "() takes " + params.size() + " positional argument(s) but " + args.size() + " were given",
+                    lineNumber
+                );
+            }
+            bound.put(params.get(i), args.get(i));
+        }
+        for (Map.Entry<String, Value> e : kw.entrySet()) {
+            String p = e.getKey();
+            if (!params.contains(p)) {
+                throw new GrizzlyExecutionException(
+                    name + "() got an unexpected keyword argument '" + p + "'",
+                    lineNumber
+                );
+            }
+            if (bound.containsKey(p)) {
+                throw new GrizzlyExecutionException(
+                    name + "() got multiple values for argument '" + p + "'",
+                    lineNumber
+                );
+            }
+            bound.put(p, e.getValue());
+        }
+        for (String p : params) {
+            if (!bound.containsKey(p)) {
+                throw new GrizzlyExecutionException(
+                    name + "() missing required positional argument: '" + p + "'",
+                    lineNumber
+                );
+            }
+            funcContext.set(p, bound.get(p));
         }
         
         return executeFunction(func, funcContext);
+    }
+    
+    private Map<String, Value> evaluateKeywordArguments(Map<String, Expression> kwExprs, ExecutionContext context) {
+        if (kwExprs == null || kwExprs.isEmpty()) return Map.of();
+        Map<String, Value> result = new HashMap<>();
+        for (Map.Entry<String, Expression> e : kwExprs.entrySet()) {
+            result.put(e.getKey(), evaluateExpression(e.getValue(), context));
+        }
+        return result;
     }
     
     private Value executeIf(IfStatement ifStmt, ExecutionContext context) {
@@ -544,7 +590,22 @@ public class GrizzlyInterpreter {
                     checkTimeout();
                 }
                 
-                context.set(forLoop.variable(), item);
+                // Tuple unpacking: for k, v in items -> unpack sequence to variables
+                List<String> vars = forLoop.variables();
+                if (vars.size() == 1) {
+                    context.set(vars.get(0), item);
+                } else {
+                    List<Value> unpacked = toUnpackableSequence(item, forLoop.lineNumber());
+                    if (unpacked.size() != vars.size()) {
+                        String msg = unpacked.size() < vars.size()
+                            ? "not enough values to unpack (expected " + vars.size() + ", got " + unpacked.size() + ")"
+                            : "too many values to unpack (expected " + vars.size() + ", got " + unpacked.size() + ")";
+                        throw new GrizzlyExecutionException(msg, forLoop.lineNumber());
+                    }
+                    for (int vi = 0; vi < vars.size(); vi++) {
+                        context.set(vars.get(vi), unpacked.get(vi));
+                    }
+                }
                 
                 for (Statement stmt : forLoop.body()) {
                     try {
@@ -1116,21 +1177,17 @@ public class GrizzlyInterpreter {
                 String methodName = methodCall.methodName();
                 Map<String, BuiltinFunction> modFns = modules.getModule(moduleName);
                 if (modFns != null && modFns.containsKey(methodName)) {
-                    List<Value> args = new ArrayList<>();
-                    for (Expression argExpr : methodCall.arguments()) {
-                        args.add(evaluateExpression(argExpr, context));
-                    }
-                    return modFns.get(methodName).apply(args);
+                    List<Value> args = evaluateArguments(methodCall.arguments(), context);
+                    Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
+                    return modFns.get(methodName).apply(args, kw);
                 }
                 DictValue modVal = modules.getModuleValue(moduleName);
                 if (modVal != null && modVal.containsKey(methodName)) {
                     Value attr = modVal.get(methodName);
                     if (attr instanceof CallableValue cv) {
-                        List<Value> args = new ArrayList<>();
-                        for (Expression argExpr : methodCall.arguments()) {
-                            args.add(evaluateExpression(argExpr, context));
-                        }
-                        return cv.call(args);
+                        List<Value> args = evaluateArguments(methodCall.arguments(), context);
+                        Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
+                        return cv.call(args, kw);
                     }
                 }
                 if (modFns != null || modVal != null) {
@@ -1147,11 +1204,9 @@ public class GrizzlyInterpreter {
         String methodName = methodCall.methodName();
         
         if (obj instanceof CallableValue cv) {
-            List<Value> args = new ArrayList<>();
-            for (Expression argExpr : methodCall.arguments()) {
-                args.add(evaluateExpression(argExpr, context));
-            }
-            return cv.call(args);
+            List<Value> args = evaluateArguments(methodCall.arguments(), context);
+            Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
+            return cv.call(args, kw);
         }
         
         if (obj instanceof NullValue) {
@@ -1242,7 +1297,8 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
-        return invokeFunction(funcCall.functionName(), funcCall.args(), context, 0);
+        Map<String, Expression> kw = funcCall.keywordArgs();
+        return invokeFunction(funcCall.functionName(), funcCall.args(), kw != null ? kw : Map.of(), context, 0);
     }
     
     private void setTarget(Expression target, Value value, ExecutionContext context) {
@@ -1390,6 +1446,26 @@ public class GrizzlyInterpreter {
             case ">=" -> l >= r;
             default -> throw new GrizzlyExecutionException("Unknown comparison operator: " + operator);
         };
+    }
+    
+    /**
+     * Convert a Value to a sequence for tuple unpacking (for k, v in items).
+     * Supports ListValue and StringValue. Python: each item must be iterable with matching length.
+     */
+    private List<Value> toUnpackableSequence(Value value, int lineNumber) {
+        if (value instanceof ListValue list) {
+            return list.items();
+        }
+        if (value instanceof StringValue str) {
+            List<Value> chars = new ArrayList<>();
+            for (char c : str.value().toCharArray()) {
+                chars.add(new StringValue(String.valueOf(c)));
+            }
+            return chars;
+        }
+        throw new GrizzlyExecutionException(
+            "cannot unpack " + value.typeName() + " object", lineNumber
+        );
     }
     
     /**

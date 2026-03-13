@@ -8,7 +8,9 @@ import com.grizzly.core.logging.GrizzlyLogger;
 import com.grizzly.core.parser.ast.*;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * <h1>Parser - Step 2 of the Compilation Pipeline</h1>
@@ -421,19 +423,8 @@ public class GrizzlyParser {
                 // It's a function call
                 String functionName = identToken.value();
                 advance(); // Skip '('
-                
-                List<Expression> args = new ArrayList<>();
-                if (peek().type() != TokenType.RPAREN) {
-                    do {
-                        args.add(parseExpression());
-                        if (peek().type() == TokenType.COMMA) {
-                            advance();
-                        }
-                    } while (peek().type() != TokenType.RPAREN);
-                }
-                
-                expect(TokenType.RPAREN, "Expected ')'");
-                return new FunctionCall(functionName, args, lineNumber);
+                var callArgs = parseCallArguments();
+                return new FunctionCall(functionName, callArgs.positional(), callArgs.keyword(), lineNumber);
             } else {
                 // Not a function call, restore position
                 position = savePos;
@@ -643,7 +634,13 @@ public class GrizzlyParser {
         int lineNumber = peek().line();
         
         expect(TokenType.FOR, "Expected 'for'");
-        String variable = expect(TokenType.IDENTIFIER, "Expected variable name").value();
+        List<String> variables = new ArrayList<>();
+        variables.add(expect(TokenType.IDENTIFIER, "Expected variable name").value());
+        while (peek().type() == TokenType.COMMA) {
+            advance();
+            skipNewlinesAndIndentDedent();
+            variables.add(expect(TokenType.IDENTIFIER, "Expected variable name").value());
+        }
         expect(TokenType.IN, "Expected 'in'");
         Expression iterable = parseOr(); // avoid next-line "if" parsed as ternary (e.g. "for x in list \n if ...")
         expect(TokenType.COLON, "Expected ':' after for statement");
@@ -667,7 +664,7 @@ public class GrizzlyParser {
             advance();
         }
         
-        return new ForLoop(variable, iterable, body, lineNumber);
+        return new ForLoop(variables, iterable, body, lineNumber);
     }
     
     /**
@@ -1112,19 +1109,8 @@ public class GrizzlyParser {
                     // Check if it's a method call
                     if (peek().type() == TokenType.LPAREN) {
                         advance(); // Skip '('
-                        List<Expression> args = new ArrayList<>();
-                        
-                        if (peek().type() != TokenType.RPAREN) {
-                            do {
-                                args.add(parseExpression());
-                                if (peek().type() == TokenType.COMMA) {
-                                    advance();
-                                }
-                            } while (peek().type() != TokenType.RPAREN);
-                        }
-                        
-                        expect(TokenType.RPAREN, "Expected ')'");
-                        expr = new MethodCall(expr, attr, args);
+                        var callArgs = parseCallArguments();
+                        expr = new MethodCall(expr, attr, callArgs.positional(), callArgs.keyword());
                     } else {
                         // Attribute access (with safe flag)
                         expr = new AttrAccess(expr, attr, safe);
@@ -1133,19 +1119,8 @@ public class GrizzlyParser {
                 } else if (tokenType == TokenType.LPAREN) {
                     // Function call expression: len(items), helper(x)
                     advance(); // Skip '('
-                    List<Expression> args = new ArrayList<>();
-                    
-                    if (peek().type() != TokenType.RPAREN) {
-                        do {
-                            args.add(parseExpression());
-                            if (peek().type() == TokenType.COMMA) {
-                                advance();
-                            }
-                        } while (peek().type() != TokenType.RPAREN);
-                    }
-                    
-                    expect(TokenType.RPAREN, "Expected ')'");
-                    expr = new FunctionCallExpression(name, args);
+                    var callArgs = parseCallArguments();
+                    expr = new FunctionCallExpression(name, callArgs.positional(), callArgs.keyword());
                     // Continue chain to allow func(x).attr or func(x)[0]
                 } else {
                     break;
@@ -1313,15 +1288,8 @@ public class GrizzlyParser {
                 String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").value();
                 if (peek().type() == TokenType.LPAREN) {
                     advance();
-                    List<Expression> args = new ArrayList<>();
-                    if (peek().type() != TokenType.RPAREN) {
-                        do {
-                            args.add(parseExpression());
-                            if (peek().type() == TokenType.COMMA) advance();
-                        } while (peek().type() != TokenType.RPAREN);
-                    }
-                    expect(TokenType.RPAREN, "Expected ')'");
-                    expr = new MethodCall(expr, attr, args);
+                    var callArgs = parseCallArguments();
+                    expr = new MethodCall(expr, attr, callArgs.positional(), callArgs.keyword());
                 } else {
                     expr = new AttrAccess(expr, attr, safe);
                 }
@@ -1425,6 +1393,39 @@ public class GrizzlyParser {
             );
         }
         return advance();
+    }
+    
+    /** Parse function/method call arguments: positional and keyword (id=expr). Python: no positional after keyword. */
+    private record ParseCallArgs(List<Expression> positional, Map<String, Expression> keyword) {}
+    
+    private ParseCallArgs parseCallArguments() {
+        skipNewlinesAndIndentDedent();
+        List<Expression> positional = new ArrayList<>();
+        Map<String, Expression> keyword = new LinkedHashMap<>();
+        boolean seenKeyword = false;
+        while (peek().type() != TokenType.RPAREN) {
+            if (seenKeyword || (peek().type() == TokenType.IDENTIFIER && peekNext().type() == TokenType.ASSIGN)) {
+                String name = expect(TokenType.IDENTIFIER, "Expected keyword argument name").value();
+                expect(TokenType.ASSIGN, "Expected '=' in keyword argument");
+                Expression value = parseExpression();
+                if (keyword.containsKey(name)) {
+                    throw new GrizzlyParseException("keyword argument repeated: " + name, peek().line(), peek().column());
+                }
+                keyword.put(name, value);
+                seenKeyword = true;
+            } else {
+                positional.add(parseExpression());
+            }
+            skipNewlinesAndIndentDedent();
+            if (peek().type() == TokenType.COMMA) {
+                advance();
+                skipNewlinesAndIndentDedent();
+            } else {
+                break;
+            }
+        }
+        expect(TokenType.RPAREN, "Expected ')'");
+        return new ParseCallArgs(positional, keyword);
     }
     
     private void skipNewlines() {
