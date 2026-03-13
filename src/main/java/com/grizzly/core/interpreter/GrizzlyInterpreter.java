@@ -877,7 +877,7 @@ public class GrizzlyInterpreter {
                 try {
                     Expression expr = GrizzlyParser.parseExpressionFromSource(exprSource);
                     Value val = evaluateExpression(expr, context);
-                    out.append(val != null ? val.toString() : "None");
+                    out.append(val != null ? ValueUtils.asString(val) : "None");
                 } catch (Exception e) {
                     throw new GrizzlyExecutionException("F-string interpolation failed: " + e.getMessage());
                 }
