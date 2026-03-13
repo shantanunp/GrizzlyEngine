@@ -66,8 +66,8 @@ class StringMethodsTest {
     @DisplayName("splitlines() splits on line breaks")
     void splitlines() {
         Value result = StringMethods.evaluate(
-            new StringValue("line1\nline2\nline3"), 
-            "splitlines", 
+            new StringValue("line1\nline2\nline3"),
+            "splitlines",
             List.of()
         );
         assertThat(result).isInstanceOf(ListValue.class);
@@ -75,7 +75,35 @@ class StringMethodsTest {
         assertThat(list.size()).isEqualTo(3);
         assertThat(((StringValue) list.get(0)).value()).isEqualTo("line1");
     }
-    
+
+    @Test
+    @DisplayName("split() with no args splits on whitespace (Python-compliant)")
+    void splitNoArgs() {
+        Value result = StringMethods.evaluate(
+            new StringValue("  a  b  c  "),
+            "split",
+            List.of()
+        );
+        assertThat(result).isInstanceOf(ListValue.class);
+        ListValue list = (ListValue) result;
+        assertThat(list.size()).isEqualTo(3);
+        assertThat(((StringValue) list.get(0)).value()).isEqualTo("a");
+        assertThat(((StringValue) list.get(1)).value()).isEqualTo("b");
+        assertThat(((StringValue) list.get(2)).value()).isEqualTo("c");
+    }
+
+    @Test
+    @DisplayName("split() with empty string returns empty list")
+    void splitEmptyString() {
+        Value result = StringMethods.evaluate(
+            new StringValue(""),
+            "split",
+            List.of()
+        );
+        assertThat(result).isInstanceOf(ListValue.class);
+        assertThat(((ListValue) result).size()).isEqualTo(0);
+    }
+
     // ==================== Search ====================
     
     @Test

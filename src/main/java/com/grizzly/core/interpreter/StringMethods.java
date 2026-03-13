@@ -5,7 +5,6 @@ import com.grizzly.core.types.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import static com.grizzly.core.interpreter.ValueUtils.*;
 
@@ -36,10 +35,10 @@ public final class StringMethods {
             case "title" -> title(str.value());
             case "swapcase" -> swapcase(str.value());
             
-            // Whitespace handling
-            case "strip" -> new StringValue(str.value().strip());
-            case "lstrip" -> new StringValue(str.value().stripLeading());
-            case "rstrip" -> new StringValue(str.value().stripTrailing());
+            // Whitespace handling (with optional chars argument, Python-compliant)
+            case "strip" -> strip(str.value(), args);
+            case "lstrip" -> lstrip(str.value(), args);
+            case "rstrip" -> rstrip(str.value(), args);
             
             // Splitting and joining
             case "split" -> split(str.value(), args);
@@ -56,7 +55,6 @@ public final class StringMethods {
             // Prefix/suffix checks
             case "startswith" -> startswith(str.value(), args);
             case "endswith" -> endswith(str.value(), args);
-            case "contains" -> contains(str.value(), args);
             
             // Character type checks
             case "isdigit" -> BoolValue.of(!str.value().isEmpty() && str.value().chars().allMatch(Character::isDigit));
@@ -87,7 +85,7 @@ public final class StringMethods {
         StringBuilder sb = new StringBuilder();
         boolean capitalizeNext = true;
         for (char c : s.toCharArray()) {
-            if (Character.isWhitespace(c)) {
+            if (!Character.isLetter(c) && !Character.isDigit(c)) {
                 capitalizeNext = true;
                 sb.append(c);
             } else if (capitalizeNext) {
@@ -118,16 +116,21 @@ public final class StringMethods {
         String sep = args.isEmpty() ? null : asString(args.get(0));
         int maxSplit = args.size() > 1 ? toInt(args.get(1)) : -1;
         
-        String[] parts;
-        if (sep == null) {
-            parts = s.strip().split("\\s+", maxSplit > 0 ? maxSplit + 1 : -1);
-        } else {
-            parts = s.split(java.util.regex.Pattern.quote(sep), maxSplit > 0 ? maxSplit + 1 : -1);
-        }
-        
         List<Value> result = new ArrayList<>();
-        for (String part : parts) {
-            if (sep != null || !part.isEmpty()) {
+        if (sep == null) {
+            // Python: split on runs of whitespace, no leading/trailing empty strings
+            if (s.isEmpty()) {
+                return new ListValue(result);
+            }
+            String[] parts = s.split("\\s+", maxSplit > 0 ? maxSplit + 1 : -1);
+            for (String part : parts) {
+                if (!part.isEmpty()) {
+                    result.add(new StringValue(part));
+                }
+            }
+        } else {
+            String[] parts = s.split(java.util.regex.Pattern.quote(sep), maxSplit > 0 ? maxSplit + 1 : -1);
+            for (String part : parts) {
                 result.add(new StringValue(part));
             }
         }
@@ -135,10 +138,16 @@ public final class StringMethods {
     }
     
     private static Value splitlines(String s) {
+        if (s.isEmpty()) {
+            return new ListValue(new ArrayList<>());
+        }
         String[] lines = s.split("\\r?\\n", -1);
         List<Value> result = new ArrayList<>();
-        for (String line : lines) {
-            result.add(new StringValue(line));
+        for (int i = 0; i < lines.length; i++) {
+            if (i == lines.length - 1 && lines[i].isEmpty()) {
+                break;
+            }
+            result.add(new StringValue(lines[i]));
         }
         return new ListValue(result);
     }
@@ -248,12 +257,6 @@ public final class StringMethods {
         return BoolValue.of(region.endsWith(suffix));
     }
     
-    private static Value contains(String s, List<Value> args) {
-        requireArgCount("contains", args, 1);
-        String substr = asString(args.get(0));
-        return BoolValue.of(s.contains(substr));
-    }
-    
     private static Value zfill(String s, List<Value> args) {
         requireArgCount("zfill", args, 1);
         int width = toInt(args.get(0));
@@ -318,5 +321,36 @@ public final class StringMethods {
         int rightPadding = totalPadding - leftPadding;
         
         return new StringValue(fillchar.repeat(leftPadding) + s + fillchar.repeat(rightPadding));
+    }
+    
+    private static Value strip(String s, List<Value> args) {
+        if (args.isEmpty()) {
+            return new StringValue(s.strip());
+        }
+        String chars = asString(args.get(0));
+        int start = 0, end = s.length();
+        while (start < end && chars.indexOf(s.charAt(start)) >= 0) start++;
+        while (end > start && chars.indexOf(s.charAt(end - 1)) >= 0) end--;
+        return new StringValue(s.substring(start, end));
+    }
+    
+    private static Value lstrip(String s, List<Value> args) {
+        if (args.isEmpty()) {
+            return new StringValue(s.stripLeading());
+        }
+        String chars = asString(args.get(0));
+        int start = 0;
+        while (start < s.length() && chars.indexOf(s.charAt(start)) >= 0) start++;
+        return new StringValue(s.substring(start));
+    }
+    
+    private static Value rstrip(String s, List<Value> args) {
+        if (args.isEmpty()) {
+            return new StringValue(s.stripTrailing());
+        }
+        String chars = asString(args.get(0));
+        int end = s.length();
+        while (end > 0 && chars.indexOf(s.charAt(end - 1)) >= 0) end--;
+        return new StringValue(s.substring(0, end));
     }
 }

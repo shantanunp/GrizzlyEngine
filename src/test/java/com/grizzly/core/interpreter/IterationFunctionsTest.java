@@ -162,7 +162,22 @@ class IterationFunctionsTest {
         List<Integer> sortedList = (List<Integer>) result.get("sorted");
         assertThat(sortedList).containsExactly(5, 4, 3, 1, 1);
     }
-    
+
+    @Test
+    @DisplayName("sorted() with mixed types raises TypeError (Python-compliant)")
+    void sortedMixedTypes() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                items = [3, "a", 1]
+                OUTPUT["sorted"] = sorted(items)
+                return OUTPUT
+            """;
+        GrizzlyTemplate compiled = engine.compile(template);
+        assertThatThrownBy(() -> compiled.executeRaw(new HashMap<>()))
+            .hasMessageContaining("unorderable types");
+    }
+
     // ==================== reversed() ====================
     
     @Test
@@ -318,12 +333,12 @@ class IterationFunctionsTest {
         GrizzlyTemplate compiled = engine.compile(template);
         Map<String, Object> result = compiled.executeRaw(new HashMap<>());
         
-        assertThat(result.get("strType")).isEqualTo("string");
-        assertThat(result.get("intType")).isEqualTo("number");
+        assertThat(result.get("strType")).isEqualTo("str");
+        assertThat(result.get("intType")).isEqualTo("int");
         assertThat(result.get("listType")).isEqualTo("list");
         assertThat(result.get("dictType")).isEqualTo("dict");
         assertThat(result.get("boolType")).isEqualTo("bool");
-        assertThat(result.get("noneType")).isEqualTo("null");
+        assertThat(result.get("noneType")).isEqualTo("NoneType");
     }
     
     // ==================== isinstance() ====================
@@ -334,9 +349,9 @@ class IterationFunctionsTest {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                OUTPUT["isStr"] = isinstance("hello", "string")
-                OUTPUT["isNum"] = isinstance(42, "number")
-                OUTPUT["notStr"] = isinstance(42, "string")
+                OUTPUT["isStr"] = isinstance("hello", "str")
+                OUTPUT["isNum"] = isinstance(42, "int")
+                OUTPUT["notStr"] = isinstance(42, "str")
                 return OUTPUT
             """;
         

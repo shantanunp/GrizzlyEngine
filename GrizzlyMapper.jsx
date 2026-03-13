@@ -1520,7 +1520,7 @@ const GrizzlyMappingTool = () => {
           {name:'upper',     label:'upper(text)',          args:true, ph:'item?.field'},
           {name:'lower',     label:'lower(text)',          args:true, ph:'item?.field'},
           {name:'concat',    label:'concat(a,b,...)',      args:true, ph:'item?.a, item?.b'},
-          {name:'formatAddressLine', label:'formatAddressLine(addr)', args:true, ph:'collateral?.subjectProperty?.address'},
+          {name:'formatAddressLine', label:'formatAddressLine(addr)', args:true, ph:'orderItem?.itemDetails?.address'},
         ];
         // valTypes / valColors derived from shared VALUE_TYPE_CONFIG
         const valTypes  = Object.fromEntries(Object.entries(VALUE_TYPE_CONFIG).map(([k,v]) => [k, v.label]));
@@ -1773,7 +1773,7 @@ const GrizzlyMappingTool = () => {
         { name: 'lower', label: 'lower(text)', desc: 'Lowercase string', args: true, argsPlaceholder: 'input.field' },
         { name: 'concat', label: 'concat(a, b, ...)', desc: 'Join strings (nulls → "")', args: true, argsPlaceholder: 'input.a, input.b' },
         { name: 'coalesce', label: 'coalesce(a, b)', desc: 'First non-null value', args: true, argsPlaceholder: 'input.field, "default"' },
-        { name: 'formatAddressLine', label: 'formatAddressLine(addr)', desc: 'Format address by addressFormatType (Individual, POBox, etc.)', args: true, argsPlaceholder: 'collateral?.subjectProperty?.address' },
+        { name: 'formatAddressLine', label: 'formatAddressLine(addr)', desc: 'Format address by addressFormatType (Individual, POBox, etc.)', args: true, argsPlaceholder: 'orderItem?.itemDetails?.address' },
       ];
 
       const typeConfig = VALUE_TYPE_CONFIG;

@@ -18,7 +18,7 @@ public record NullValue() implements Value {
     
     @Override
     public String typeName() {
-        return "null";
+        return "NoneType";
     }
     
     @Override

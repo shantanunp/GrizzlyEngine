@@ -10,30 +10,19 @@ import java.time.temporal.ChronoUnit;
  * 
  * <p>Stores a specific moment in time (like "February 22, 2024 at 2:30 PM in New York").
  * 
- * <p><b>How to create:</b>
+ * <p><b>Python-compatible usage:</b>
  * <pre>{@code
- * // Current time
+ * // Current time (builtin)
  * now = now()
- * 
- * // From a string
- * date = parseDate("2024-02-22", "yyyy-MM-dd")
- * date = parseDate("22/02/2024", "dd/MM/yyyy")
- * 
- * // With timezone
  * utcTime = now("UTC")
- * nyTime = now("America/New_York")
- * }</pre>
  * 
- * <p><b>What you can do:</b>
- * <pre>{@code
- * // Add or subtract time
- * tomorrow = addDays(today, 1)
- * nextWeek = addDays(today, 7)
- * lastMonth = addMonths(today, -1)
+ * // From string (datetime module)
+ * from datetime import datetime
+ * date = datetime.strptime("2024-02-22", "%Y-%m-%d")
  * 
- * // Format as string
- * formatted = formatDate(date, "dd/MM/yyyy")  // "22/02/2024"
- * formatted = formatDate(date, "yyyyMMdd")    // "20240222"
+ * // Format (builtin or strftime)
+ * formatted = formatDate(date, "dd/MM/yyyy")
+ * formatted = date.strftime("%Y-%m-%d")
  * }</pre>
  */
 public final class DateTimeValue implements Value {

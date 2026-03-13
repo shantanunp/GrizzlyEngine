@@ -74,7 +74,7 @@ public record NumberValue(Number value) implements Value {
     
     @Override
     public String typeName() {
-        return "number";
+        return isInteger() ? "int" : "float";
     }
     
     @Override

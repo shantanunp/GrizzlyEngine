@@ -106,10 +106,10 @@ class ValueUtilsTest {
     }
     
     @Test
-    @DisplayName("areEqual compares string to number with coercion")
+    @DisplayName("areEqual does not coerce string to number (Python-compliant)")
     void areEqual_StringToNumber() {
-        assertThat(ValueUtils.areEqual(new StringValue("42"), NumberValue.of(42))).isTrue();
-        assertThat(ValueUtils.areEqual(NumberValue.of(42), new StringValue("42"))).isTrue();
+        assertThat(ValueUtils.areEqual(new StringValue("42"), NumberValue.of(42))).isFalse();
+        assertThat(ValueUtils.areEqual(NumberValue.of(42), new StringValue("42"))).isFalse();
         assertThat(ValueUtils.areEqual(new StringValue("abc"), NumberValue.of(42))).isFalse();
     }
     
@@ -177,7 +177,7 @@ class ValueUtilsTest {
         assertThatThrownBy(() -> 
             ValueUtils.requireType("func", NumberValue.of(1), StringValue.class, "arg"))
             .isInstanceOf(GrizzlyExecutionException.class)
-            .hasMessageContaining("must be a string, got: number");
+            .hasMessageContaining("must be a str, got: int");
     }
     
     // ==================== getTypeName() Tests ====================
@@ -185,11 +185,11 @@ class ValueUtilsTest {
     @Test
     @DisplayName("getTypeName returns correct type names")
     void getTypeName_AllTypes() {
-        assertThat(ValueUtils.getTypeName(StringValue.class)).isEqualTo("string");
-        assertThat(ValueUtils.getTypeName(NumberValue.class)).isEqualTo("number");
+        assertThat(ValueUtils.getTypeName(StringValue.class)).isEqualTo("str");
+        assertThat(ValueUtils.getTypeName(NumberValue.class)).isEqualTo("int");
         assertThat(ValueUtils.getTypeName(BoolValue.class)).isEqualTo("bool");
         assertThat(ValueUtils.getTypeName(ListValue.class)).isEqualTo("list");
         assertThat(ValueUtils.getTypeName(DictValue.class)).isEqualTo("dict");
-        assertThat(ValueUtils.getTypeName(NullValue.class)).isEqualTo("null");
+        assertThat(ValueUtils.getTypeName(NullValue.class)).isEqualTo("NoneType");
     }
 }

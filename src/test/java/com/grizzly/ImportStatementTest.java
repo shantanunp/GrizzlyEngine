@@ -13,11 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for Python import statement support.
  * 
- * <p>Verifies that both styles work:
- * <ul>
- *   <li>Old style: {@code re_match(pattern, text)}</li>
- *   <li>New style: {@code import re} then {@code re.match(pattern, text)}</li>
- * </ul>
+ * <p>Verifies Python-style imports: {@code import re}, {@code from decimal import Decimal}.
  */
 @DisplayName("Import Statement Tests")
 public class ImportStatementTest {
@@ -33,9 +29,9 @@ public class ImportStatementTest {
             def transform(INPUT):
                 OUTPUT = {}
                 if re.match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
-                    OUTPUT["validSSN"] = true
+                    OUTPUT["validSSN"] = True
                 else:
-                    OUTPUT["validSSN"] = false
+                    OUTPUT["validSSN"] = False
                 return OUTPUT
             """;
         
@@ -60,9 +56,9 @@ public class ImportStatementTest {
                 OUTPUT = {}
                 match = re.search(r"\\d+", INPUT.text)
                 if match:
-                    OUTPUT["found"] = true
+                    OUTPUT["found"] = True
                 else:
-                    OUTPUT["found"] = false
+                    OUTPUT["found"] = False
                 return OUTPUT
             """;
         
@@ -117,17 +113,18 @@ public class ImportStatementTest {
     public void testMultipleImports() {
         String template = """
             import re
+            from decimal import Decimal
             
             def transform(INPUT):
                 OUTPUT = {}
                 
                 # Use re module
                 if re.match(r"^\\d+$", INPUT.text):
-                    OUTPUT["isNumber"] = true
+                    OUTPUT["isNumber"] = True
                 else:
-                    OUTPUT["isNumber"] = false
+                    OUTPUT["isNumber"] = False
                 
-                # Use Decimal (built-in, no import needed)
+                # Use Decimal from decimal module
                 amount = Decimal("100.50")
                 OUTPUT["amount"] = str(amount)
                 

@@ -21,7 +21,7 @@ public record StringValue(String value) implements Value {
     
     @Override
     public String typeName() {
-        return "string";
+        return "str";
     }
     
     @Override

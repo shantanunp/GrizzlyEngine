@@ -179,6 +179,32 @@ class GrizzlyEngineTest {
     }
     
     @Test
+    void shouldHandlePythonSliceSyntax() throws Exception {
+        String template = """
+            def transform(INPUT):
+                OUTPUT = {}
+                s = INPUT["text"]
+                OUTPUT["slice12"] = s[1:3]
+                OUTPUT["slice0"] = s[:2]
+                OUTPUT["sliceEnd"] = s[2:]
+                OUTPUT["reversed"] = s[::-1]
+                OUTPUT["listSlice"] = INPUT["items"][1:3]
+                return OUTPUT
+            """;
+        GrizzlyEngine engine = new GrizzlyEngine();
+        GrizzlyTemplate compiled = engine.compile(template);
+        Map<String, Object> input = new HashMap<>();
+        input.put("text", "hello");
+        input.put("items", java.util.List.of("a", "b", "c", "d"));
+        Map<String, Object> result = compiled.executeRaw(input);
+        assertThat(result).containsEntry("slice12", "el");
+        assertThat(result).containsEntry("slice0", "he");
+        assertThat(result).containsEntry("sliceEnd", "llo");
+        assertThat(result).containsEntry("reversed", "olleh");
+        assertThat(result.get("listSlice")).asList().containsExactly("b", "c");
+    }
+
+    @Test
     void shouldHandleComparisons() throws Exception {
         String template = """
             def transform(INPUT):

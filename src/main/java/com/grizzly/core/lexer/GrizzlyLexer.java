@@ -141,17 +141,13 @@ public class GrizzlyLexer {
         Map.entry("return", TokenType.RETURN),
         Map.entry("for", TokenType.FOR),
         Map.entry("in", TokenType.IN),
-        Map.entry("switch", TokenType.SWITCH),
         // "match" is not in KEYWORDS: used as soft keyword at statement start only (re.match, match=... stay valid)
         Map.entry("case", TokenType.CASE),
-        Map.entry("default", TokenType.DEFAULT),
         Map.entry("break", TokenType.BREAK),
         Map.entry("continue", TokenType.CONTINUE),
         Map.entry("True", TokenType.TRUE),
         Map.entry("False", TokenType.FALSE),
         Map.entry("None", TokenType.NONE),
-        Map.entry("true", TokenType.TRUE),   // Also support lowercase for backwards compat
-        Map.entry("false", TokenType.FALSE),
         Map.entry("import", TokenType.IMPORT),
         Map.entry("from", TokenType.FROM),
         Map.entry("and", TokenType.AND),
@@ -682,22 +678,24 @@ public class GrizzlyLexer {
     
     /**
      * Handle escape sequences in strings (\n, \t, \\, etc.)
+     * Python-compliant: unknown escape sequences preserve the backslash.
      */
-    private char handleEscapeSequence() {
+    private String handleEscapeSequence() {
         advance(); // Skip backslash
-        if (isAtEnd()) return '\\';
+        if (isAtEnd()) return "\\";
         
         char escaped = currentChar();
         advance();
         
         return switch (escaped) {
-            case 'n' -> '\n';
-            case 't' -> '\t';
-            case 'r' -> '\r';
-            case '\\' -> '\\';
-            case '"' -> '"';
-            case '\'' -> '\'';
-            default -> escaped;
+            case 'n' -> "\n";
+            case 't' -> "\t";
+            case 'r' -> "\r";
+            case '\\' -> "\\";
+            case '"' -> "\"";
+            case '\'' -> "'";
+            case '0' -> "\0";
+            default -> "\\" + escaped;
         };
     }
     

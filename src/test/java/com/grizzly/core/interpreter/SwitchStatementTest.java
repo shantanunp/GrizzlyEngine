@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests for switch/case/default statement.
+ * Tests for match/case statement (Python 3.10+ style).
  */
 class SwitchStatementTest {
 
@@ -24,18 +24,18 @@ class SwitchStatementTest {
     }
 
     @Test
-    @DisplayName("switch matches first case")
+    @DisplayName("match matches first case")
     void switchMatchesFirstCase() throws Exception {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
                 status = INPUT["status"]
-                switch status:
+                match status:
                     case "active":
                         OUTPUT["code"] = 1
                     case "pending":
                         OUTPUT["code"] = 2
-                    default:
+                    case _:
                         OUTPUT["code"] = 0
                 return OUTPUT
             """;
@@ -46,17 +46,17 @@ class SwitchStatementTest {
     }
 
     @Test
-    @DisplayName("switch matches second case")
+    @DisplayName("match matches second case")
     void switchMatchesSecondCase() throws Exception {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                switch INPUT["status"]:
+                match INPUT["status"]:
                     case "active":
                         OUTPUT["code"] = 1
                     case "pending":
                         OUTPUT["code"] = 2
-                    default:
+                    case _:
                         OUTPUT["code"] = 0
                 return OUTPUT
             """;
@@ -67,17 +67,17 @@ class SwitchStatementTest {
     }
 
     @Test
-    @DisplayName("switch falls through to default when no case matches")
+    @DisplayName("match falls through to case _ when no case matches")
     void switchDefault() throws Exception {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
-                switch INPUT["status"]:
+                match INPUT["status"]:
                     case "active":
                         OUTPUT["code"] = 1
                     case "pending":
                         OUTPUT["code"] = 2
-                    default:
+                    case _:
                         OUTPUT["code"] = 0
                 return OUTPUT
             """;
@@ -88,18 +88,18 @@ class SwitchStatementTest {
     }
 
     @Test
-    @DisplayName("switch with numeric cases")
+    @DisplayName("match with numeric cases")
     void switchNumericCases() throws Exception {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
                 x = INPUT["x"]
-                switch x:
+                match x:
                     case 1:
                         OUTPUT["label"] = "one"
                     case 2:
                         OUTPUT["label"] = "two"
-                    default:
+                    case _:
                         OUTPUT["label"] = "other"
                 return OUTPUT
             """;
@@ -110,13 +110,13 @@ class SwitchStatementTest {
     }
 
     @Test
-    @DisplayName("switch without default does nothing when no match")
+    @DisplayName("match without case _ does nothing when no match")
     void switchNoDefault() throws Exception {
         String template = """
             def transform(INPUT):
                 OUTPUT = {}
                 OUTPUT["code"] = -1
-                switch INPUT["k"]:
+                match INPUT["k"]:
                     case "a":
                         OUTPUT["code"] = 1
                 return OUTPUT

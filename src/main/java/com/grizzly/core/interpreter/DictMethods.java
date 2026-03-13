@@ -28,7 +28,7 @@ public final class DictMethods {
      * @return The result
      */
     public static Value evaluate(DictValue dict, String methodName, List<Value> args) {
-        return switch (methodName) {
+        Value result = switch (methodName) {
             case "get" -> get(dict, args);
             case "keys" -> keys(dict, args);
             case "values" -> values(dict, args);
@@ -38,9 +38,17 @@ public final class DictMethods {
             case "clear" -> clear(dict);
             case "copy" -> copy(dict);
             case "setdefault" -> setdefault(dict, args);
-            
-            default -> throw new GrizzlyExecutionException("Unknown dict method: " + methodName);
+            default -> null;
         };
+        if (result != null) return result;
+        // Python-compatible: allow callable attributes (e.g. datetime.datetime.now)
+        if (dict.containsKey(methodName)) {
+            Value v = dict.get(methodName);
+            if (v instanceof CallableValue cv) {
+                return cv.call(args);
+            }
+        }
+        throw new GrizzlyExecutionException("Unknown dict method: " + methodName);
     }
     
     private static Value get(DictValue dict, List<Value> args) {

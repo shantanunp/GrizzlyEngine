@@ -30,7 +30,9 @@ public sealed interface Value permits
     DictValue, 
     NullValue,
     DateTimeValue, 
-    DecimalValue {
+    DecimalValue,
+    CallableValue,
+    ReMatchValue {
     
     /**
      * Returns the type name for error messages and debugging.

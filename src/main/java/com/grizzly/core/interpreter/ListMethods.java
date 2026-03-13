@@ -132,12 +132,7 @@ public final class ListMethods {
         final boolean descending = reverse;
         
         list.items().sort((a, b) -> {
-            int cmp;
-            if (a instanceof NumberValue na && b instanceof NumberValue nb) {
-                cmp = Double.compare(na.asDouble(), nb.asDouble());
-            } else {
-                cmp = asString(a).compareTo(asString(b));
-            }
+            int cmp = ValueUtils.compareForSort(a, b);
             return descending ? -cmp : cmp;
         });
         

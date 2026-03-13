@@ -388,13 +388,14 @@ isinstance(value, "str")
 ### DateTime Functions
 
 ```python
-now()                              # Current datetime
+now()                              # Current datetime (builtin)
 now("UTC")                         # With timezone
-parseDate("2024-02-22", "yyyy-MM-dd")
-formatDate(dt, "dd/MM/yyyy")
-addDays(dt, 5)
-addMonths(dt, 2)
-addYears(dt, 1)
+formatDate(dt, "dd/MM/yyyy")       # Format (builtin)
+
+# Python-compatible: use datetime module
+from datetime import datetime
+dt = datetime.strptime("2024-02-22", "%Y-%m-%d")
+formatted = dt.strftime("%Y-%m-%d")
 ```
 
 ---

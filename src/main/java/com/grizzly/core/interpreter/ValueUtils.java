@@ -40,6 +40,8 @@ public final class ValueUtils {
     public static double toDouble(Value value) {
         if (value instanceof NumberValue n) {
             return n.asDouble();
+        } else if (value instanceof BoolValue b) {
+            return b.value() ? 1.0 : 0.0;
         } else if (value instanceof StringValue s) {
             try {
                 return Double.parseDouble(s.value());
@@ -59,6 +61,8 @@ public final class ValueUtils {
     public static int toInt(Value value) {
         if (value instanceof NumberValue n) {
             return n.asInt();
+        } else if (value instanceof BoolValue b) {
+            return b.value() ? 1 : 0;
         } else if (value instanceof StringValue s) {
             try {
                 return Integer.parseInt(s.value());
@@ -82,6 +86,8 @@ public final class ValueUtils {
     public static long toLong(Value value) {
         if (value instanceof NumberValue n) {
             return n.asLong();
+        } else if (value instanceof BoolValue b) {
+            return b.value() ? 1L : 0L;
         } else if (value instanceof StringValue s) {
             try {
                 return Long.parseLong(s.value());
@@ -151,51 +157,85 @@ public final class ValueUtils {
      * Get human-readable type name for a Value class.
      */
     public static String getTypeName(Class<? extends Value> type) {
-        if (type == StringValue.class) return "string";
-        if (type == NumberValue.class) return "number";
+        if (type == StringValue.class) return "str";
+        if (type == NumberValue.class) return "int";
         if (type == BoolValue.class) return "bool";
         if (type == ListValue.class) return "list";
         if (type == DictValue.class) return "dict";
         if (type == DateTimeValue.class) return "datetime";
-        if (type == DecimalValue.class) return "decimal";
-        if (type == NullValue.class) return "null";
+        if (type == DecimalValue.class) return "Decimal";
+        if (type == NullValue.class) return "NoneType";
         return type.getSimpleName().replace("Value", "").toLowerCase();
     }
     
     // ==================== Equality & Comparison ====================
     
     /**
-     * Check equality between two values with numeric coercion.
+     * Check equality between two values (Python-compliant: no implicit str/number coercion).
+     * In Python, "5" == 5 is False.
      */
     public static boolean areEqual(Value left, Value right) {
+        // Python: bool is a subclass of int, so True == 1 and False == 0
+        if (left instanceof BoolValue bl && right instanceof NumberValue rn) {
+            return Math.abs((bl.value() ? 1.0 : 0.0) - rn.asDouble()) < 1e-10;
+        }
+        if (left instanceof NumberValue ln && right instanceof BoolValue br) {
+            return Math.abs(ln.asDouble() - (br.value() ? 1.0 : 0.0)) < 1e-10;
+        }
         if (left instanceof NumberValue ln && right instanceof NumberValue rn) {
             return Math.abs(ln.asDouble() - rn.asDouble()) < 1e-10;
         }
-        
-        if (left instanceof StringValue ls && right instanceof NumberValue rn) {
-            try {
-                double leftNum = Double.parseDouble(ls.value());
-                return Math.abs(leftNum - rn.asDouble()) < 1e-10;
-            } catch (NumberFormatException e) {
-                return false;
-            }
+        if (left instanceof DecimalValue ld && right instanceof DecimalValue rd) {
+            return ld.getValue().compareTo(rd.getValue()) == 0;
         }
-        
-        if (left instanceof NumberValue ln && right instanceof StringValue rs) {
-            try {
-                double rightNum = Double.parseDouble(rs.value());
-                return Math.abs(ln.asDouble() - rightNum) < 1e-10;
-            } catch (NumberFormatException e) {
-                return false;
-            }
+        if (left instanceof DecimalValue ld && right instanceof NumberValue rn) {
+            return ld.getValue().compareTo(java.math.BigDecimal.valueOf(rn.asDouble())) == 0;
         }
-        
+        if (left instanceof NumberValue ln && right instanceof DecimalValue rd) {
+            return rd.getValue().compareTo(java.math.BigDecimal.valueOf(ln.asDouble())) == 0;
+        }
         return left.equals(right);
     }
     
     /**
-     * Compare two numeric values.
-     * 
+     * Compare two values for ordering (Python-compliant: TypeError for mixed types).
+     *
+     * @return negative if left < right, 0 if equal, positive if left > right
+     * @throws GrizzlyExecutionException (TypeError) for incompatible types
+     */
+    public static int compareForSort(Value left, Value right) {
+        if (left instanceof NumberValue ln && right instanceof NumberValue rn) {
+            return Double.compare(ln.asDouble(), rn.asDouble());
+        }
+        if (left instanceof DecimalValue ld && right instanceof DecimalValue rd) {
+            return ld.getValue().compareTo(rd.getValue());
+        }
+        if (left instanceof DecimalValue ld && right instanceof NumberValue rn) {
+            return ld.getValue().compareTo(java.math.BigDecimal.valueOf(rn.asDouble()));
+        }
+        if (left instanceof NumberValue ln && right instanceof DecimalValue rd) {
+            return -rd.getValue().compareTo(java.math.BigDecimal.valueOf(ln.asDouble()));
+        }
+        if (left instanceof StringValue ls && right instanceof StringValue rs) {
+            return ls.value().compareTo(rs.value());
+        }
+        if (left instanceof ListValue ll && right instanceof ListValue rl) {
+            var li = ll.items().iterator();
+            var ri = rl.items().iterator();
+            while (li.hasNext() && ri.hasNext()) {
+                int cmp = compareForSort(li.next(), ri.next());
+                if (cmp != 0) return cmp;
+            }
+            return Integer.compare(li.hasNext() ? 1 : 0, ri.hasNext() ? 1 : 0);
+        }
+        throw new GrizzlyExecutionException(
+            "unorderable types: " + left.typeName() + "() and " + right.typeName() + "()"
+        );
+    }
+
+    /**
+     * Compare two numeric values (for arithmetic comparisons).
+     *
      * @return negative if left < right, 0 if equal, positive if left > right
      */
     public static int compareNumeric(Value left, Value right) {

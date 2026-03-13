@@ -1,7 +1,7 @@
 package com.grizzly.core.types;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -97,7 +97,7 @@ public final class ValueConverter {
             return new ListValue(items);
         }
         if (obj instanceof Map<?, ?> map) {
-            Map<String, Value> entries = new HashMap<>();
+            Map<String, Value> entries = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = String.valueOf(entry.getKey());
                 entries.put(key, fromJava(entry.getValue()));
@@ -120,7 +120,7 @@ public final class ValueConverter {
         if (map == null) {
             return DictValue.empty();
         }
-        Map<String, Value> entries = new HashMap<>();
+        Map<String, Value> entries = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             entries.put(entry.getKey(), fromJava(entry.getValue()));
         }
@@ -168,7 +168,7 @@ public final class ValueConverter {
             }
             return list;
         } else if (value instanceof DictValue d) {
-            Map<String, Object> map = new HashMap<>();
+            Map<String, Object> map = new LinkedHashMap<>();
             for (Map.Entry<String, Value> entry : d.entries().entrySet()) {
                 map.put(entry.getKey(), toJava(entry.getValue()));
             }
@@ -177,6 +177,17 @@ public final class ValueConverter {
             return dt.toString();
         } else if (value instanceof DecimalValue dec) {
             return dec.toString();
+        } else if (value instanceof ReMatchValue m) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("group0", m.fullMatch());
+            List<Object> groups = new ArrayList<>();
+            for (Value g : m.groups()) {
+                groups.add(g != null ? toJava(g) : null);
+            }
+            map.put("groups", groups);
+            return map;
+        } else if (value instanceof CallableValue) {
+            return "<callable>";
         } else {
             throw new IllegalArgumentException("Unknown Value type: " + value.getClass().getSimpleName());
         }

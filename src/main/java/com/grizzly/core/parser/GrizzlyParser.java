@@ -227,10 +227,11 @@ public class GrizzlyParser {
         
         // Parse all top-level statements (imports and functions)
         while (!isAtEnd()) {
-            if (peek().type() == TokenType.IMPORT) {
+            if (peek().type() == TokenType.FROM || peek().type() == TokenType.IMPORT) {
                 ImportStatement imp = parseImportStatement();
                 imports.add(imp);
-                GrizzlyLogger.debug("PARSER", "Parsed import: " + imp.moduleName());
+                GrizzlyLogger.debug("PARSER", "Parsed import: " + imp.moduleName() + 
+                    (imp.isFromImport() ? " (" + imp.importedNames() + ")" : ""));
                 skipNewlines();
             } else if (peek().type() == TokenType.DEF) {
                 FunctionDef func = parseFunction();
@@ -261,14 +262,26 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse an import statement
-     * Example: import re
+     * Parse an import statement. Python-compatible.
+     * Examples: import re | from decimal import Decimal | from datetime import datetime, timedelta
      */
     private ImportStatement parseImportStatement() {
         int lineNumber = peek().line();
+        if (peek().type() == TokenType.FROM) {
+            advance(); // 'from'
+            String moduleName = expect(TokenType.IDENTIFIER, "Expected module name after 'from'").value();
+            expect(TokenType.IMPORT, "Expected 'import' after module name");
+            List<String> names = new ArrayList<>();
+            names.add(expect(TokenType.IDENTIFIER, "Expected name to import").value());
+            while (peek().type() == TokenType.COMMA) {
+                advance();
+                names.add(expect(TokenType.IDENTIFIER, "Expected name after comma").value());
+            }
+            return ImportStatement.fromImport(moduleName, names, lineNumber);
+        }
         expect(TokenType.IMPORT, "Expected 'import'");
         String moduleName = expect(TokenType.IDENTIFIER, "Expected module name").value();
-        return new ImportStatement(moduleName, lineNumber);
+        return ImportStatement.simple(moduleName, lineNumber);
     }
     
     /**
@@ -358,11 +371,9 @@ public class GrizzlyParser {
     private Statement parseStatement() {
         int lineNumber = peek().line();
         
-        // Import statement
-        if (peek().type() == TokenType.IMPORT) {
-            advance(); // Skip 'import'
-            String moduleName = expect(TokenType.IDENTIFIER, "Expected module name after 'import'").value();
-            return new ImportStatement(moduleName, lineNumber);
+        // Import statement (from X import Y or import X - only at top level normally, but allow in body)
+        if (peek().type() == TokenType.FROM || peek().type() == TokenType.IMPORT) {
+            return parseImportStatement();
         }
         
         // Return statement
@@ -392,11 +403,6 @@ public class GrizzlyParser {
         // For loop
         if (peek().type() == TokenType.FOR) {
             return parseForLoop();
-        }
-        
-        // Switch statement
-        if (peek().type() == TokenType.SWITCH) {
-            return parseSwitchStatement();
         }
         
         // Match statement (Python 3.10+ style); "match" is soft keyword only when not followed by "="
@@ -665,51 +671,6 @@ public class GrizzlyParser {
     }
     
     /**
-     * Parse switch statement: switch expr: case value: ... default: ...
-     */
-    private SwitchStatement parseSwitchStatement() {
-        int lineNumber = peek().line();
-        expect(TokenType.SWITCH, "Expected 'switch'");
-        Expression expression = parseOr();
-        expect(TokenType.COLON, "Expected ':' after switch expression");
-        skipNewlines();
-        if (peek().type() == TokenType.INDENT) {
-            advance();
-        }
-        skipNewlines();
-        List<SwitchStatement.CaseBranch> caseBranches = new ArrayList<>();
-        while (peek().type() == TokenType.CASE) {
-            advance();
-            Expression caseValue = parseOr();
-            expect(TokenType.COLON, "Expected ':' after case value");
-            skipNewlines();
-            if (peek().type() == TokenType.INDENT) {
-                advance();
-            }
-            List<Statement> caseBlock = parseIndentedBlock(TokenType.CASE, TokenType.DEFAULT);
-            caseBranches.add(new SwitchStatement.CaseBranch(caseValue, caseBlock));
-            if (peek().type() == TokenType.DEDENT) {
-                advance();
-            }
-            skipNewlines();
-        }
-        List<Statement> defaultBlock = null;
-        if (peek().type() == TokenType.DEFAULT) {
-            advance();
-            expect(TokenType.COLON, "Expected ':' after default");
-            skipNewlines();
-            if (peek().type() == TokenType.INDENT) {
-                advance();
-            }
-            defaultBlock = parseIndentedBlock();
-        }
-        if (peek().type() == TokenType.DEDENT) {
-            advance();
-        }
-        return new SwitchStatement(expression, caseBranches, defaultBlock != null ? defaultBlock : List.of(), lineNumber);
-    }
-    
-    /**
      * Parse match statement (Python 3.10+ style): match expr: case value: ... case _: ...
      * Uses same AST as switch; "case _:" is treated as default.
      */
@@ -750,7 +711,7 @@ public class GrizzlyParser {
             if (peek().type() == TokenType.INDENT) {
                 advance();
             }
-            List<Statement> caseBlock = parseIndentedBlock(TokenType.CASE, TokenType.DEFAULT);
+            List<Statement> caseBlock = parseIndentedBlock(TokenType.CASE);
             caseBranches.add(new SwitchStatement.CaseBranch(caseValue, caseBlock));
             if (peek().type() == TokenType.DEDENT) {
                 advance();
@@ -779,6 +740,7 @@ public class GrizzlyParser {
      * 
      * @return Expression AST node with proper precedence
      */
+    
     /**
      * Parse a single expression from source (e.g. for f-string interpolation).
      * @throws GrizzlyParseException if the source is not a valid expression
@@ -1108,14 +1070,14 @@ public class GrizzlyParser {
             }
         }
         
-        // Grouped expression: ( expression ) — e.g. (a + b), (x if c else y)
+        // Grouped expression: ( expression ) — e.g. (a + b), (x if c else y), (expr)[0:2]
         if (token.type() == TokenType.LPAREN) {
             advance();
             skipNewlinesAndIndentDedent();
             Expression expr = parseExpression();
             skipNewlinesAndIndentDedent();
             expect(TokenType.RPAREN, "Expected ')' after grouped expression");
-            return expr;
+            return parseSubscriptAndAttrChain(expr);
         }
         
         // Dict literal: {} or {"key": value, ...}
@@ -1134,20 +1096,13 @@ public class GrizzlyParser {
             advance();
             Expression expr = new Identifier(name);
             
-            // Check for dict access, list access, attribute access, or method call
+            // Check for dict access, list access, attribute access, method call, or function call
             // Also handles safe navigation: ?. and ?[
             while (true) {
                 TokenType tokenType = peek().type();
                 
                 if (tokenType == TokenType.LBRACKET || tokenType == TokenType.SAFE_LBRACKET) {
-                    // Dict/list access: obj["key"] or obj?["key"]
-                    boolean safe = (tokenType == TokenType.SAFE_LBRACKET);
-                    advance();
-                    Expression key = parseExpression();
-                    expect(TokenType.RBRACKET, "Expected ']'");
-                    
-                    expr = new DictAccess(expr, key, safe);
-                    
+                    expr = parseSubscriptOn(expr);
                 } else if (tokenType == TokenType.DOT || tokenType == TokenType.SAFE_DOT) {
                     // Attribute access or method call: obj.attr or obj?.attr
                     boolean safe = (tokenType == TokenType.SAFE_DOT);
@@ -1190,9 +1145,8 @@ public class GrizzlyParser {
                     }
                     
                     expect(TokenType.RPAREN, "Expected ')'");
-                    
-                    // Return as FunctionCallExpression
-                    return new FunctionCallExpression(name, args);
+                    expr = new FunctionCallExpression(name, args);
+                    // Continue chain to allow func(x).attr or func(x)[0]
                 } else {
                     break;
                 }
@@ -1327,6 +1281,113 @@ public class GrizzlyParser {
         
         expect(TokenType.RBRACE, "Expected '}'");
         return new DictLiteral(entries);
+    }
+    
+    /**
+     * Apply subscript {@code [key]} or slice {@code [start:end:step]} to an expression.
+     * Used for both identifiers and grouped expressions.
+     */
+    private Expression parseSubscriptOn(Expression expr) {
+        TokenType tt = peek().type();
+        boolean safe = (tt == TokenType.SAFE_LBRACKET);
+        advance();
+        SubscriptResult sub = parseSubscript();
+        expect(TokenType.RBRACKET, "Expected ']'");
+        return sub.isSlice()
+            ? new SliceExpression(expr, sub.start(), sub.end(), sub.step(), safe)
+            : new DictAccess(expr, sub.index(), safe);
+    }
+    
+    /**
+     * Parse postfix subscript and attribute chain: {@code expr[0:2].attr}.
+     * Used for grouped expressions like {@code (x or y)[1:3]}.
+     */
+    private Expression parseSubscriptAndAttrChain(Expression expr) {
+        while (true) {
+            TokenType tt = peek().type();
+            if (tt == TokenType.LBRACKET || tt == TokenType.SAFE_LBRACKET) {
+                expr = parseSubscriptOn(expr);
+            } else if (tt == TokenType.DOT || tt == TokenType.SAFE_DOT) {
+                boolean safe = (tt == TokenType.SAFE_DOT);
+                advance();
+                String attr = expect(TokenType.IDENTIFIER, "Expected attribute name").value();
+                if (peek().type() == TokenType.LPAREN) {
+                    advance();
+                    List<Expression> args = new ArrayList<>();
+                    if (peek().type() != TokenType.RPAREN) {
+                        do {
+                            args.add(parseExpression());
+                            if (peek().type() == TokenType.COMMA) advance();
+                        } while (peek().type() != TokenType.RPAREN);
+                    }
+                    expect(TokenType.RPAREN, "Expected ')'");
+                    expr = new MethodCall(expr, attr, args);
+                } else {
+                    expr = new AttrAccess(expr, attr, safe);
+                }
+            } else {
+                break;
+            }
+        }
+        return expr;
+    }
+    
+    /**
+     * Result of parsing subscript: either index {@code obj[key]} or slice {@code obj[start:end:step]}.
+     */
+    private record SubscriptResult(boolean isSlice, Expression index, Expression start, Expression end, Expression step) {}
+    
+    /**
+     * Parse subscript inside {@code [ ]}: either index {@code key} or slice {@code start:end:step}.
+     * Python slice forms: {@code [:]}, {@code [start:]}, {@code [:end]}, {@code [start:end]},
+     * {@code [::step]}, {@code [start::step]}, {@code [:end:step]}, {@code [start:end:step]}.
+     */
+    private SubscriptResult parseSubscript() {
+        skipNewlinesAndIndentDedent();
+        if (peek().type() == TokenType.COLON) {
+            // [:], [:end], [::step], [:end:step]
+            advance();
+            skipNewlinesAndIndentDedent();
+            Expression end = null;
+            if (peek().type() != TokenType.COLON && peek().type() != TokenType.RBRACKET) {
+                end = parseExpression();
+                skipNewlinesAndIndentDedent();
+            }
+            Expression step = null;
+            if (peek().type() == TokenType.COLON) {
+                advance();
+                skipNewlinesAndIndentDedent();
+                if (peek().type() != TokenType.RBRACKET) {
+                    step = parseExpression();
+                }
+            }
+            return new SubscriptResult(true, null, null, end, step);
+        }
+        Expression first = parseExpression();
+        skipNewlinesAndIndentDedent();
+        if (peek().type() == TokenType.RBRACKET) {
+            return new SubscriptResult(false, first, null, null, null);
+        }
+        if (peek().type() == TokenType.COLON) {
+            // [start:], [start:end], [start:end:step], [start::step]
+            advance();
+            skipNewlinesAndIndentDedent();
+            Expression end = null;
+            if (peek().type() != TokenType.COLON && peek().type() != TokenType.RBRACKET) {
+                end = parseExpression();
+                skipNewlinesAndIndentDedent();
+            }
+            Expression step = null;
+            if (peek().type() == TokenType.COLON) {
+                advance();
+                skipNewlinesAndIndentDedent();
+                if (peek().type() != TokenType.RBRACKET) {
+                    step = parseExpression();
+                }
+            }
+            return new SubscriptResult(true, null, first, end, step);
+        }
+        throw new GrizzlyParseException("Expected ']' or ':' in subscript", peek().line(), peek().column());
     }
     
     // === Helper methods ===

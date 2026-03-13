@@ -281,7 +281,7 @@ public class GrizzlyInterpreter {
             throw new GrizzlyExecutionException("No 'transform' function found in template");
         }
         
-        ExecutionContext context = new ExecutionContext(tracker);
+        ExecutionContext context = globalContext.createChild();
         context.set("INPUT", input);
         GrizzlyLogger.debug("INTERPRETER", "Bound INPUT with " + input.size() + " keys");
         
@@ -353,6 +353,23 @@ public class GrizzlyInterpreter {
                     i.lineNumber()
                 );
             }
+            if (i.isFromImport()) {
+                for (String name : i.importedNames()) {
+                    Value export = modules.getModuleExport(i.moduleName(), name);
+                    if (export == null) {
+                        throw new GrizzlyExecutionException(
+                            "Cannot import '" + name + "' from '" + i.moduleName() + "'",
+                            i.lineNumber()
+                        );
+                    }
+                    context.set(name, export);
+                }
+            } else {
+                DictValue modVal = modules.getModuleValue(i.moduleName());
+                if (modVal != null) {
+                    context.set(i.moduleName(), modVal);
+                }
+            }
             return NullValue.INSTANCE;
         } else if (stmt instanceof Assignment a) {
             return executeAssignment(a, context);
@@ -414,6 +431,11 @@ public class GrizzlyInterpreter {
     
     private Value invokeFunction(String name, List<Expression> argExprs, 
                                  ExecutionContext context, int lineNumber) {
+        Value ctxVal = context.getOrNull(name);
+        if (ctxVal instanceof CallableValue cv) {
+            List<Value> args = evaluateArguments(argExprs, context);
+            return cv.call(args);
+        }
         if (builtins.contains(name)) {
             List<Value> args = evaluateArguments(argExprs, context);
             return builtins.get(name).apply(args);
@@ -582,6 +604,8 @@ public class GrizzlyInterpreter {
                 return evaluateListComprehension(lc, context);
             } else if (expr instanceof DictAccess d) {
                 return evaluateDictAccess(d, context);
+            } else if (expr instanceof SliceExpression s) {
+                return evaluateSliceExpression(s, context);
             } else if (expr instanceof AttrAccess a) {
                 return evaluateAttrAccess(a, context);
             } else if (expr instanceof BinaryOp b) {
@@ -653,6 +677,75 @@ public class GrizzlyInterpreter {
                 "Cannot access key on object of type " + obj.typeName()
             );
         }
+    }
+    
+    private Value evaluateSliceExpression(SliceExpression slice, ExecutionContext context) {
+        Value obj = evaluateExpression(slice.object(), context);
+        boolean safe = slice.safe();
+        if (obj instanceof NullValue) {
+            if (safe || config.nullHandling() == NullHandling.SAFE || config.nullHandling() == NullHandling.SILENT) {
+                return NullValue.INSTANCE;
+            }
+            throw new GrizzlyExecutionException("Cannot slice None");
+        }
+        Integer start = slice.start() == null ? null : toInt(evaluateExpression(slice.start(), context));
+        Integer end = slice.end() == null ? null : toInt(evaluateExpression(slice.end(), context));
+        Integer step = slice.step() == null ? null : toInt(evaluateExpression(slice.step(), context));
+        if (step != null && step == 0) {
+            throw new GrizzlyExecutionException("slice step cannot be zero");
+        }
+        if (obj instanceof StringValue s) {
+            return new StringValue(pythonSlice(s.value(), start, end, step));
+        }
+        if (obj instanceof ListValue list) {
+            List<Value> items = list.items();
+            return new ListValue(pythonSliceList(items, start, end, step));
+        }
+        if (safe || config.nullHandling() == NullHandling.SAFE || config.nullHandling() == NullHandling.SILENT) {
+            return NullValue.INSTANCE;
+        }
+        throw new GrizzlyExecutionException("Cannot slice object of type " + obj.typeName());
+    }
+    
+    private static String pythonSlice(String s, Integer start, Integer end, Integer step) {
+        int len = s.length();
+        int stp = step != null ? step : 1;
+        int st = resolveSliceStart(start, len, stp);
+        int en = resolveSliceEnd(end, len, stp);
+        StringBuilder sb = new StringBuilder();
+        if (stp > 0) {
+            for (int i = st; i < en; i += stp) sb.append(s.charAt(i));
+        } else {
+            for (int i = st; i > en; i += stp) sb.append(s.charAt(i));
+        }
+        return sb.toString();
+    }
+    
+    private static List<Value> pythonSliceList(List<Value> items, Integer start, Integer end, Integer step) {
+        int len = items.size();
+        int stp = step != null ? step : 1;
+        int st = resolveSliceStart(start, len, stp);
+        int en = resolveSliceEnd(end, len, stp);
+        List<Value> result = new ArrayList<>();
+        if (stp > 0) {
+            for (int i = st; i < en; i += stp) result.add(items.get(i));
+        } else {
+            for (int i = st; i > en; i += stp) result.add(items.get(i));
+        }
+        return result;
+    }
+    
+    /** Python slice start: None -> 0 if step>0 else len-1; negative adds len. */
+    private static int resolveSliceStart(Integer start, int len, int step) {
+        int s = start != null ? (start < 0 ? len + start : start) : (step > 0 ? 0 : len - 1);
+        return Math.max(0, Math.min(s, len));
+    }
+    
+    /** Python slice end: None -> len if step>0 else -1; negative adds len. */
+    private static int resolveSliceEnd(Integer end, int len, int step) {
+        if (end == null) return step > 0 ? len : -1;
+        int e = end < 0 ? len + end : end;
+        return step > 0 ? Math.max(0, Math.min(e, len)) : e;
     }
     
     private Value evaluateAttrAccess(AttrAccess attrAccess, ExecutionContext context) {
@@ -1012,19 +1105,35 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateMethodCall(MethodCall methodCall, ExecutionContext context) {
+        Value obj = null;
         if (methodCall.object() instanceof Identifier id) {
-            String moduleName = id.name();
-            String methodName = methodCall.methodName();
-            
-            if (modules.containsModule(moduleName)) {
-                Map<String, BuiltinFunction> module = modules.getModule(moduleName);
-                if (module.containsKey(methodName)) {
+            // Prefer context (e.g. "from datetime import datetime" → datetime is the class with strptime)
+            Value contextVal = context.get(id.name());
+            if (contextVal != null) {
+                obj = contextVal;
+            } else if (modules.containsModule(id.name())) {
+                String moduleName = id.name();
+                String methodName = methodCall.methodName();
+                Map<String, BuiltinFunction> modFns = modules.getModule(moduleName);
+                if (modFns != null && modFns.containsKey(methodName)) {
                     List<Value> args = new ArrayList<>();
                     for (Expression argExpr : methodCall.arguments()) {
                         args.add(evaluateExpression(argExpr, context));
                     }
-                    return module.get(methodName).apply(args);
-                } else {
+                    return modFns.get(methodName).apply(args);
+                }
+                DictValue modVal = modules.getModuleValue(moduleName);
+                if (modVal != null && modVal.containsKey(methodName)) {
+                    Value attr = modVal.get(methodName);
+                    if (attr instanceof CallableValue cv) {
+                        List<Value> args = new ArrayList<>();
+                        for (Expression argExpr : methodCall.arguments()) {
+                            args.add(evaluateExpression(argExpr, context));
+                        }
+                        return cv.call(args);
+                    }
+                }
+                if (modFns != null || modVal != null) {
                     throw new GrizzlyExecutionException(
                         "Module '" + moduleName + "' has no function '" + methodName + "'"
                     );
@@ -1032,8 +1141,18 @@ public class GrizzlyInterpreter {
             }
         }
         
-        Value obj = evaluateExpression(methodCall.object(), context);
+        if (obj == null) {
+            obj = evaluateExpression(methodCall.object(), context);
+        }
         String methodName = methodCall.methodName();
+        
+        if (obj instanceof CallableValue cv) {
+            List<Value> args = new ArrayList<>();
+            for (Expression argExpr : methodCall.arguments()) {
+                args.add(evaluateExpression(argExpr, context));
+            }
+            return cv.call(args);
+        }
         
         if (obj instanceof NullValue) {
             throw new GrizzlyExecutionException(
@@ -1051,6 +1170,14 @@ public class GrizzlyInterpreter {
         
         if (obj instanceof DictValue dict) {
             return evaluateDictMethod(dict, methodName, methodCall.arguments(), context);
+        }
+        
+        if (obj instanceof DateTimeValue dt) {
+            return evaluateDateTimeMethod(dt, methodName, methodCall.arguments(), context);
+        }
+        
+        if (obj instanceof ReMatchValue m) {
+            return evaluateReMatchMethod(m, methodName, methodCall.arguments(), context);
         }
         
         throw new GrizzlyExecutionException(
@@ -1074,6 +1201,36 @@ public class GrizzlyInterpreter {
                                      List<Expression> arguments, ExecutionContext context) {
         List<Value> args = evaluateArguments(arguments, context);
         return DictMethods.evaluate(dict, methodName, args);
+    }
+    
+    private Value evaluateDateTimeMethod(DateTimeValue dt, String methodName,
+                                         List<Expression> arguments, ExecutionContext context) {
+        return switch (methodName) {
+            case "strftime" -> {
+                if (arguments.size() != 1) {
+                    throw new GrizzlyExecutionException("strftime() takes exactly 1 argument, got " + arguments.size());
+                }
+                String fmt = asString(evaluateExpression(arguments.get(0), context));
+                yield new StringValue(dt.format(pythonToJavaDateFormat(fmt)));
+            }
+            default -> throw new GrizzlyExecutionException(
+                "datetime object has no attribute '" + methodName + "'"
+            );
+        };
+    }
+    
+    private Value evaluateReMatchMethod(ReMatchValue m, String methodName,
+                                        List<Expression> arguments, ExecutionContext context) {
+        return switch (methodName) {
+            case "group" -> {
+                int idx = arguments.isEmpty() ? 0 : toInt(evaluateExpression(arguments.get(0), context));
+                yield m.group(idx);
+            }
+            case "groups" -> m.groupsList();
+            default -> throw new GrizzlyExecutionException(
+                "Match object has no attribute '" + methodName + "'"
+            );
+        };
     }
     
     private List<Value> evaluateArguments(List<Expression> arguments, ExecutionContext context) {
@@ -1184,14 +1341,33 @@ public class GrizzlyInterpreter {
     }
     
     private boolean evaluateComparison(Value left, Value right, String operator) {
+        if (left instanceof StringValue || right instanceof StringValue) {
+            if (!(left instanceof StringValue)) {
+                throw new GrizzlyExecutionException(
+                    "unorderable types: " + left.typeName() + "() and " + right.typeName() + "()"
+                );
+            }
+            if (!(right instanceof StringValue)) {
+                throw new GrizzlyExecutionException(
+                    "unorderable types: " + left.typeName() + "() and " + right.typeName() + "()"
+                );
+            }
+            int cmp = ((StringValue) left).value().compareTo(((StringValue) right).value());
+            return switch (operator) {
+                case "<" -> cmp < 0;
+                case ">" -> cmp > 0;
+                case "<=" -> cmp <= 0;
+                case ">=" -> cmp >= 0;
+                default -> throw new GrizzlyExecutionException("Unknown comparison operator: " + operator);
+            };
+        }
         if (left instanceof DecimalValue || right instanceof DecimalValue) {
-            DecimalValue l = (left instanceof DecimalValue ld) 
-                ? ld 
+            DecimalValue l = (left instanceof DecimalValue ld)
+                ? ld
                 : new DecimalValue(asString(left));
-            DecimalValue r = (right instanceof DecimalValue rd) 
-                ? rd 
+            DecimalValue r = (right instanceof DecimalValue rd)
+                ? rd
                 : new DecimalValue(asString(right));
-            
             return switch (operator) {
                 case "<" -> l.lessThan(r);
                 case ">" -> l.greaterThan(r);
@@ -1200,10 +1376,13 @@ public class GrizzlyInterpreter {
                 default -> throw new GrizzlyExecutionException("Unknown comparison operator: " + operator);
             };
         }
-        
+        if (!(left instanceof NumberValue) || !(right instanceof NumberValue)) {
+            throw new GrizzlyExecutionException(
+                "unorderable types: " + left.typeName() + "() and " + right.typeName() + "()"
+            );
+        }
         double l = toDouble(left);
         double r = toDouble(right);
-        
         return switch (operator) {
             case "<" -> l < r;
             case ">" -> l > r;
@@ -1241,5 +1420,22 @@ public class GrizzlyInterpreter {
                 "Cannot iterate over " + value.typeName(), lineNumber
             );
         }
+    }
+    
+    /** Convert Python strftime format (%Y, %m, etc.) to Java DateTimeFormatter pattern. */
+    private static String pythonToJavaDateFormat(String fmt) {
+        return fmt
+            .replace("%Y", "yyyy")
+            .replace("%m", "MM")
+            .replace("%d", "dd")
+            .replace("%H", "HH")
+            .replace("%M", "mm")
+            .replace("%S", "ss")
+            .replace("%f", "SSSSSS")
+            .replace("%y", "yy")
+            .replace("%B", "MMMM")
+            .replace("%b", "MMM")
+            .replace("%A", "EEEE")
+            .replace("%a", "EEE");
     }
 }

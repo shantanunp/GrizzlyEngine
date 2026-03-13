@@ -30,6 +30,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal creation from string")
     public void testDecimalCreation() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 amount = Decimal("1234.56")
@@ -47,6 +49,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal addition - no precision loss")
     public void testDecimalAddition() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 # The classic float problem: 0.1 + 0.2 != 0.3
@@ -70,6 +74,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal multiplication - exact precision")
     public void testDecimalMultiplication() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 # Three times $0.30 should be exactly $0.90
@@ -92,6 +98,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal interest calculation")
     public void testDecimalInterestCalculation() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 principal = Decimal(INPUT.amount)
@@ -120,6 +128,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal division with rounding")
     public void testDecimalDivision() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 total = Decimal("12000.00")
@@ -139,6 +149,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal comparison in if statements")
     public void testDecimalComparison() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 balance = Decimal(INPUT.balance)
@@ -166,6 +178,8 @@ public class DecimalAndRegexTest {
     @DisplayName("Decimal rounding to different precision")
     public void testDecimalRounding() {
         String template = """
+            from decimal import Decimal
+            
             def transform(INPUT):
                 OUTPUT = {}
                 amount = Decimal("1234.5678")
@@ -197,9 +211,9 @@ public class DecimalAndRegexTest {
             def transform(INPUT):
                 OUTPUT = {}
                 if re.match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
-                    OUTPUT["validSSN"] = true
+                    OUTPUT["validSSN"] = True
                 else:
-                    OUTPUT["validSSN"] = false
+                    OUTPUT["validSSN"] = False
                 return OUTPUT
             """;
         
@@ -223,9 +237,9 @@ public class DecimalAndRegexTest {
             def transform(INPUT):
                 OUTPUT = {}
                 if re.match(r"^[\\w\\.-]+@[\\w\\.-]+\\.[\\w]+$", INPUT.email):
-                    OUTPUT["validEmail"] = true
+                    OUTPUT["validEmail"] = True
                 else:
-                    OUTPUT["validEmail"] = false
+                    OUTPUT["validEmail"] = False
                 return OUTPUT
             """;
         
@@ -372,16 +386,17 @@ public class DecimalAndRegexTest {
     public void testDecimalAndRegexCombined() {
         String template = """
             import re
+            from decimal import Decimal
             
             def transform(INPUT):
                 OUTPUT = {}
                 
                 # Validate SSN
                 if re.match(r"^\\d{3}-\\d{2}-\\d{4}$", INPUT.ssn):
-                    OUTPUT["validSSN"] = true
+                    OUTPUT["validSSN"] = True
                     OUTPUT["ssn"] = re.sub("-", "", INPUT.ssn)
                 else:
-                    OUTPUT["validSSN"] = false
+                    OUTPUT["validSSN"] = False
                     OUTPUT["error"] = "Invalid SSN"
                     return OUTPUT
                 
@@ -423,6 +438,7 @@ public class DecimalAndRegexTest {
     public void testRegexCleanAndDecimalMath() {
         String template = """
             import re
+            from decimal import Decimal
             
             def transform(INPUT):
                 OUTPUT = {}

@@ -16,8 +16,8 @@ import static com.grizzly.core.interpreter.ValueUtils.*;
  * <p>Organizes builtins by category for maintainability:
  * <ul>
  *   <li>Core: len, range, str, int, float, bool, abs, min, max, sum</li>
- *   <li>DateTime: now, parseDate, formatDate, addDays, addMonths, etc.</li>
- *   <li>Math: Decimal, round</li>
+ *   <li>DateTime (kept): now, formatDate</li>
+ *   <li>Math: round (Decimal via from decimal import Decimal)</li>
  * </ul>
  */
 public final class BuiltinRegistry {
@@ -103,21 +103,13 @@ public final class BuiltinRegistry {
             return new ListValue(result);
         });
         
-        // str()
+        // str() - Python-compliant: str("hello") → "hello" (no extra quotes)
         functions.put("str", args -> {
             requireArgCount("str", args, 1);
-            Value value = args.get(0);
-            
-            if (value instanceof NullValue) {
-                return new StringValue("None");
-            } else if (value instanceof BoolValue b) {
-                return new StringValue(b.value() ? "True" : "False");
-            } else {
-                return new StringValue(value.toString());
-            }
+            return new StringValue(asString(args.get(0)));
         });
         
-        // int() - convert to integer
+        // int() - Python-compliant: int("3.5") raises ValueError (no silent truncation)
         functions.put("int", args -> {
             requireArgCount("int", args, 1);
             Value value = args.get(0);
@@ -125,22 +117,19 @@ public final class BuiltinRegistry {
             if (value instanceof NumberValue n) {
                 return NumberValue.of(n.asInt());
             } else if (value instanceof StringValue s) {
+                String stripped = s.value().strip();
                 try {
-                    return NumberValue.of(Integer.parseInt(s.value().strip()));
+                    return NumberValue.of(Integer.parseInt(stripped));
                 } catch (NumberFormatException e) {
-                    try {
-                        return NumberValue.of((int) Double.parseDouble(s.value().strip()));
-                    } catch (NumberFormatException e2) {
-                        throw new GrizzlyExecutionException(
-                            "Cannot convert '" + s.value() + "' to int"
-                        );
-                    }
+                    throw new GrizzlyExecutionException(
+                        "invalid literal for int() with base 10: '" + s.value() + "'"
+                    );
                 }
             } else if (value instanceof BoolValue b) {
                 return NumberValue.of(b.value() ? 1 : 0);
             } else {
                 throw new GrizzlyExecutionException(
-                    "Cannot convert " + value.typeName() + " to int"
+                    "int() argument must be a string or a number, not '" + value.typeName() + "'"
                 );
             }
         });
@@ -247,30 +236,23 @@ public final class BuiltinRegistry {
             }
             return NumberValue.of(sum);
         });
+
     }
-    
+
     private Value findMin(List<Value> values) {
         Value min = values.get(0);
-        double minVal = toDouble(min);
-        
         for (int i = 1; i < values.size(); i++) {
-            double val = toDouble(values.get(i));
-            if (val < minVal) {
-                minVal = val;
+            if (ValueUtils.compareForSort(values.get(i), min) < 0) {
                 min = values.get(i);
             }
         }
         return min;
     }
-    
+
     private Value findMax(List<Value> values) {
         Value max = values.get(0);
-        double maxVal = toDouble(max);
-        
         for (int i = 1; i < values.size(); i++) {
-            double val = toDouble(values.get(i));
-            if (val > maxVal) {
-                maxVal = val;
+            if (ValueUtils.compareForSort(values.get(i), max) > 0) {
                 max = values.get(i);
             }
         }
@@ -324,20 +306,14 @@ public final class BuiltinRegistry {
             return new ListValue(result);
         });
         
-        // sorted() - return a new sorted list
+        // sorted() - return a new sorted list (Python-compliant: TypeError for mixed types)
         functions.put("sorted", args -> {
             requireArgCountRange("sorted", args, 1, 2);
             ListValue list = requireType("sorted", args.get(0), ListValue.class, "first argument");
             boolean reverse = args.size() > 1 && args.get(1).isTruthy();
-            
             java.util.List<Value> sorted = new java.util.ArrayList<>(list.items());
             sorted.sort((a, b) -> {
-                int cmp;
-                if (a instanceof NumberValue na && b instanceof NumberValue nb) {
-                    cmp = Double.compare(na.asDouble(), nb.asDouble());
-                } else {
-                    cmp = asString(a).compareTo(asString(b));
-                }
+                int cmp = ValueUtils.compareForSort(a, b);
                 return reverse ? -cmp : cmp;
             });
             return new ListValue(sorted);
@@ -447,20 +423,20 @@ public final class BuiltinRegistry {
             return new StringValue(args.get(0).typeName());
         });
         
-        // isinstance() - check if value is of given type
+        // isinstance() - Python-compatible: only str, int, float, bool, list, dict, type(None)
         functions.put("isinstance", args -> {
             requireArgCount("isinstance", args, 2);
             Value value = args.get(0);
             String typeName = asString(args.get(1));
             
-            return BoolValue.of(switch (typeName.toLowerCase()) {
-                case "str", "string" -> value instanceof StringValue;
-                case "int", "integer" -> value instanceof NumberValue n && n.isInteger();
-                case "float", "number" -> value instanceof NumberValue;
-                case "bool", "boolean" -> value instanceof BoolValue;
+            return BoolValue.of(switch (typeName) {
+                case "str" -> value instanceof StringValue;
+                case "int" -> value instanceof NumberValue n && n.isInteger();
+                case "float" -> value instanceof NumberValue;
+                case "bool" -> value instanceof BoolValue;
                 case "list" -> value instanceof ListValue;
                 case "dict" -> value instanceof DictValue;
-                case "none", "null" -> value instanceof NullValue;
+                case "None", "type(None)" -> value instanceof NullValue;
                 case "datetime" -> value instanceof DateTimeValue;
                 case "decimal" -> value instanceof DecimalValue;
                 default -> false;
@@ -524,35 +500,6 @@ public final class BuiltinRegistry {
             }
         });
         
-        // parseDate()
-        functions.put("parseDate", args -> {
-            requireArgCountRange("parseDate", args, 2, 3);
-            
-            String dateString = asString(args.get(0));
-            String format = asString(args.get(1));
-            
-            try {
-                java.time.format.DateTimeFormatter formatter = 
-                    java.time.format.DateTimeFormatter.ofPattern(format);
-                
-                java.time.ZoneId zone = args.size() == 3 
-                    ? java.time.ZoneId.of(asString(args.get(2)))
-                    : java.time.ZoneId.systemDefault();
-                
-                try {
-                    java.time.LocalDateTime local = java.time.LocalDateTime.parse(dateString, formatter);
-                    return new DateTimeValue(local.atZone(zone));
-                } catch (Exception e) {
-                    java.time.LocalDate date = java.time.LocalDate.parse(dateString, formatter);
-                    return new DateTimeValue(date.atStartOfDay(zone));
-                }
-            } catch (Exception e) {
-                throw new GrizzlyExecutionException(
-                    "Failed to parse date '" + dateString + "' with format '" + format + "': " + e.getMessage()
-                );
-            }
-        });
-        
         // formatDate()
         functions.put("formatDate", args -> {
             requireArgCount("formatDate", args, 2);
@@ -567,71 +514,30 @@ public final class BuiltinRegistry {
                 );
             }
         });
-        
-        // addDays()
-        functions.put("addDays", args -> {
-            requireArgCount("addDays", args, 2);
-            DateTimeValue dt = requireType("addDays", args.get(0), DateTimeValue.class, "first argument");
-            return dt.addDays(toLong(args.get(1)));
-        });
-        
-        // addMonths()
-        functions.put("addMonths", args -> {
-            requireArgCount("addMonths", args, 2);
-            DateTimeValue dt = requireType("addMonths", args.get(0), DateTimeValue.class, "first argument");
-            return dt.addMonths(toLong(args.get(1)));
-        });
-        
-        // addYears()
-        functions.put("addYears", args -> {
-            requireArgCount("addYears", args, 2);
-            DateTimeValue dt = requireType("addYears", args.get(0), DateTimeValue.class, "first argument");
-            return dt.addYears(toLong(args.get(1)));
-        });
-        
-        // addHours()
-        functions.put("addHours", args -> {
-            requireArgCount("addHours", args, 2);
-            DateTimeValue dt = requireType("addHours", args.get(0), DateTimeValue.class, "first argument");
-            return dt.addHours(toLong(args.get(1)));
-        });
-        
-        // addMinutes()
-        functions.put("addMinutes", args -> {
-            requireArgCount("addMinutes", args, 2);
-            DateTimeValue dt = requireType("addMinutes", args.get(0), DateTimeValue.class, "first argument");
-            return dt.addMinutes(toLong(args.get(1)));
-        });
     }
     
     // ==================== Math Functions ====================
     
     private void registerMathFunctions() {
-        // Decimal()
-        functions.put("Decimal", args -> {
-            requireArgCount("Decimal", args, 1);
-            Value value = args.get(0);
-            
-            if (value instanceof StringValue s) {
-                return new DecimalValue(s.value());
-            } else if (value instanceof NumberValue n) {
-                if (n.isInteger()) {
-                    return new DecimalValue(n.asInt());
-                }
-                return new DecimalValue(String.valueOf(n.asDouble()));
-            } else {
-                throw new GrizzlyExecutionException(
-                    "Decimal() argument must be a string or number, got: " + value.typeName()
-                );
-            }
-        });
-        
-        // round()
+        // round(number[, ndigits]) - Python-compliant with banker's rounding (HALF_EVEN)
         functions.put("round", args -> {
-            requireArgCount("round", args, 2);
-            DecimalValue decimal = requireType("round", args.get(0), DecimalValue.class, "first argument");
-            int places = toInt(args.get(1));
-            return decimal.round(places);
+            requireArgCountRange("round", args, 1, 2);
+            Value value = args.get(0);
+            int ndigits = args.size() > 1 ? toInt(args.get(1)) : 0;
+            if (value instanceof DecimalValue d) {
+                return d.round(ndigits);
+            }
+            if (value instanceof NumberValue n) {
+                java.math.BigDecimal bd = java.math.BigDecimal.valueOf(n.asDouble());
+                bd = bd.setScale(ndigits, java.math.RoundingMode.HALF_EVEN);
+                if (ndigits <= 0) {
+                    return NumberValue.of(bd.intValue());
+                }
+                return NumberValue.of(bd.doubleValue());
+            }
+            throw new GrizzlyExecutionException(
+                "round() argument must be a number, got: " + value.typeName()
+            );
         });
     }
 }

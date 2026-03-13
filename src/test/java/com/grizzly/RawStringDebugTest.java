@@ -37,9 +37,9 @@ public class RawStringDebugTest {
                 OUTPUT = {}
                 match = re.match(r"\\d+", INPUT.text)
                 if match:
-                    OUTPUT["matched"] = true
+                    OUTPUT["matched"] = True
                 else:
-                    OUTPUT["matched"] = false
+                    OUTPUT["matched"] = False
                 return OUTPUT
             """;
         

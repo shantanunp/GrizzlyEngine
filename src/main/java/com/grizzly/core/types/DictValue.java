@@ -1,6 +1,6 @@
 package com.grizzly.core.types;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,14 +26,14 @@ public record DictValue(Map<String, Value> entries) implements Value {
      * Create an empty DictValue.
      */
     public static DictValue empty() {
-        return new DictValue(new HashMap<>());
+        return new DictValue(new LinkedHashMap<>());
     }
     
     /**
      * Create a DictValue from a Java Map.
      */
     public static DictValue of(Map<String, Value> map) {
-        return new DictValue(new HashMap<>(map));
+        return new DictValue(new LinkedHashMap<>(map));
     }
     
     /**
