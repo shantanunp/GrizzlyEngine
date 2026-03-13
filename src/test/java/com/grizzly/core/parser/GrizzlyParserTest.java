@@ -110,6 +110,29 @@ class GrizzlyParserTest {
     }
     
     @Test
+    void shouldParseFunctionWithDefaultArgs() {
+        String code = """
+            def transform(INPUT):
+                OUTPUT = {}
+                return OUTPUT
+
+            def greet(name, punctuation="!"):
+                return name
+            """;
+
+        Program program = parse(code);
+        assertThat(program.functions()).hasSize(2);
+
+        FunctionDef greet = program.functions().get(1);
+        assertThat(greet.name()).isEqualTo("greet");
+        assertThat(greet.params()).containsExactly("name", "punctuation");
+        assertThat(greet.defaultExprs()).hasSize(2);
+        assertThat(greet.defaultExprs().get(0)).isNull();
+        assertThat(greet.defaultExprs().get(1)).isInstanceOf(StringLiteral.class);
+        assertThat(((StringLiteral) greet.defaultExprs().get(1)).value()).isEqualTo("!");
+    }
+
+    @Test
     void shouldParseIfStatement() {
         String code = """
             def transform(INPUT):

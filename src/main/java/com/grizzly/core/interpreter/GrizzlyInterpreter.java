@@ -482,14 +482,19 @@ public class GrizzlyInterpreter {
             }
             bound.put(p, e.getValue());
         }
-        for (String p : params) {
-            if (!bound.containsKey(p)) {
+        List<Expression> defaultExprs = func.defaultExprs();
+        for (int i = 0; i < params.size(); i++) {
+            String p = params.get(i);
+            if (bound.containsKey(p)) {
+                funcContext.set(p, bound.get(p));
+            } else if (defaultExprs != null && i < defaultExprs.size() && defaultExprs.get(i) != null) {
+                funcContext.set(p, evaluateExpression(defaultExprs.get(i), context));
+            } else {
                 throw new GrizzlyExecutionException(
                     name + "() missing required positional argument: '" + p + "'",
                     lineNumber
                 );
             }
-            funcContext.set(p, bound.get(p));
         }
         
         return executeFunction(func, funcContext);

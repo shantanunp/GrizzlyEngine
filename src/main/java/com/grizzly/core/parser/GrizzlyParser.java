@@ -299,13 +299,30 @@ public class GrizzlyParser {
         // Get function name
         String name = expect(TokenType.IDENTIFIER, "Expected function name").value();
         
-        // Parse parameters
+        // Parse parameters (Python: param [= expr], non-default params must come first)
         expect(TokenType.LPAREN, "Expected '('");
         List<String> params = new ArrayList<>();
+        List<Expression> defaultExprs = new ArrayList<>();
+        boolean seenDefault = false;
         
         if (peek().type() != TokenType.RPAREN) {
             do {
-                params.add(expect(TokenType.IDENTIFIER, "Expected parameter name").value());
+                String paramName = expect(TokenType.IDENTIFIER, "Expected parameter name").value();
+                if (peek().type() == TokenType.ASSIGN) {
+                    advance(); // consume '='
+                    seenDefault = true;
+                    defaultExprs.add(parseExpression());
+                } else {
+                    if (seenDefault) {
+                        throw new GrizzlyParseException(
+                            "non-default argument follows default argument",
+                            peek().line(),
+                            peek().column()
+                        );
+                    }
+                    defaultExprs.add(null);
+                }
+                params.add(paramName);
                 if (peek().type() == TokenType.COMMA) {
                     advance();
                 }
@@ -332,7 +349,7 @@ public class GrizzlyParser {
             );
         }
         
-        return new FunctionDef(name, params, body, lineNumber);
+        return new FunctionDef(name, params, defaultExprs, body, lineNumber);
     }
     
     /**
