@@ -1,7 +1,10 @@
 /**
  * Core Grizzly Engine - Format-agnostic transformation engine.
- * 
- * <p>This package contains the core components of the Grizzly engine:
+ *
+ * <p>Python interpreter core. Extensions (not standard Python): {@code ?.},
+ * {@code ?[}, {@code now()}, {@code formatDate()}. See docs/PYTHON_EXTENSIONS.md.
+ *
+ * <p>This package contains the core components:
  * <ul>
  *   <li>{@link com.grizzly.core.GrizzlyEngine} - Entry point for compilation</li>
  *   <li>{@link com.grizzly.core.GrizzlyTemplate} - Compiled template for execution</li>

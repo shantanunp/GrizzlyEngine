@@ -29,6 +29,7 @@
  *   <li>Assignment - Variable assignment</li>
  *   <li>IfStatement - Conditional branching</li>
  *   <li>ForLoop - Iteration</li>
+ *   <li>SwitchStatement - Match statement (Python 3.10+ style)</li>
  *   <li>ReturnStatement - Return value</li>
  * </ul>
  * 
@@ -37,8 +38,9 @@
  *   <li>Identifier - Variable reference</li>
  *   <li>StringLiteral, NumberLiteral - Literal values</li>
  *   <li>BinaryOp - Operations (a + b, x == y)</li>
- *   <li>AttrAccess, DictAccess - Property access</li>
+ *   <li>AttrAccess, DictAccess - Property access (including ?. and ?[)</li>
  *   <li>MethodCall - Method invocation</li>
+ *   <li>ListComprehension, DictComprehension - Comprehensions</li>
  * </ul>
  * 
  * <h2>Usage</h2>
@@ -53,9 +55,9 @@
  * System.out.println("Parameters: " + transform.parameters());
  * }</pre>
  * 
- * @see com.grizzly.parser.GrizzlyParser Main parser class
- * @see com.grizzly.parser.ast AST node definitions
- * @see com.grizzly.lexer The previous step: tokenization
- * @see com.grizzly.interpreter The next step: execution
+ * @see com.grizzly.core.parser.GrizzlyParser Main parser class
+ * @see com.grizzly.core.parser.ast AST node definitions
+ * @see com.grizzly.core.lexer The previous step: tokenization
+ * @see com.grizzly.core.interpreter The next step: execution
  */
 package com.grizzly.core.parser;

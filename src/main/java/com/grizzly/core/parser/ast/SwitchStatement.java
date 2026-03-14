@@ -3,33 +3,34 @@ package com.grizzly.core.parser.ast;
 import java.util.List;
 
 /**
- * Switch statement: match an expression against case values and execute the first matching block.
+ * Match statement (Python 3.10+ style): match an expression against case values
+ * and execute the first matching block. Uses standard Python syntax.
  *
  * <p><b>Syntax:</b>
  * <pre>{@code
- * switch expr:
+ * match expr:
  *     case value1:
  *         statements
  *     case value2:
  *         statements
- *     default:
- *         statements
+ *     case _:
+ *         statements   # default/wildcard
  * }</pre>
  *
  * <p><b>Example:</b>
  * <pre>{@code
- * switch status:
- *     case "active":
- *         OUTPUT["code"] = 1
- *     case "pending":
- *         OUTPUT["code"] = 2
- *     default:
- *         OUTPUT["code"] = 0
+ * match status_code:
+ *     case 200:
+ *         return "OK"
+ *     case 404:
+ *         return "Not Found"
+ *     case _:
+ *         return "Unknown"
  * }</pre>
  *
  * @param expression   Expression to match (e.g. variable or expression)
  * @param caseBranches List of case value + block pairs
- * @param defaultBlock Statements for default (optional, can be null or empty)
+ * @param defaultBlock Statements for {@code case _} (optional, can be null or empty)
  * @param lineNumber   Source line number
  */
 public record SwitchStatement(

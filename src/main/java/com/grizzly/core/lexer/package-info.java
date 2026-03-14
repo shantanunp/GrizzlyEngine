@@ -44,12 +44,15 @@
  * <h2>Key Classes</h2>
  * 
  * <ul>
- *   <li>{@link com.grizzly.lexer.GrizzlyLexer} - The tokenizer</li>
- *   <li>{@link com.grizzly.lexer.Token} - A single token with type, value, position</li>
- *   <li>{@link com.grizzly.lexer.TokenType} - Enum of all token types</li>
+ *   <li>{@link com.grizzly.core.lexer.GrizzlyLexer} - The tokenizer</li>
+ *   <li>{@link com.grizzly.core.lexer.Token} - A single token with type, value, position</li>
+ *   <li>{@link com.grizzly.core.lexer.TokenType} - Enum of all token types</li>
  * </ul>
- * 
- * @see com.grizzly.lexer.GrizzlyLexer Main lexer class
- * @see com.grizzly.parser The next step: parsing tokens into AST
+ *
+ * <p>Extensions (not standard Python): {@code SAFE_DOT} ({@code ?.}),
+ * {@code SAFE_LBRACKET} ({@code ?[}). See docs/PYTHON_EXTENSIONS.md.
+ *
+ * @see com.grizzly.core.lexer.GrizzlyLexer Main lexer class
+ * @see com.grizzly.core.parser The next step: parsing tokens into AST
  */
 package com.grizzly.core.lexer;

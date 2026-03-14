@@ -13,13 +13,17 @@ import static com.grizzly.core.interpreter.ValueUtils.*;
 
 /**
  * Registry for all built-in functions available in Grizzly templates.
- * 
+ *
  * <p>Organizes builtins by category for maintainability:
  * <ul>
  *   <li>Core: len, range, str, int, float, bool, abs, min, max, sum</li>
- *   <li>DateTime (kept): now, formatDate</li>
- *   <li>Math: round (Decimal via from decimal import Decimal)</li>
+ *   <li>DateTime (Grizzly extensions, not standard Python): now, formatDate</li>
+ *   <li>Math: round (Decimal via {@code from decimal import Decimal})</li>
  * </ul>
+ *
+ * <p>{@code now()} and {@code formatDate()} are non-Python extensions.
+ * For Python-compatible code, use {@code from datetime import datetime}.
+ * See docs/PYTHON_EXTENSIONS.md.
  */
 public final class BuiltinRegistry {
     

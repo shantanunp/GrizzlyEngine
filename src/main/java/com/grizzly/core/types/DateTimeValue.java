@@ -7,22 +7,20 @@ import java.time.temporal.ChronoUnit;
 
 /**
  * A date and time value with timezone.
- * 
+ *
  * <p>Stores a specific moment in time (like "February 22, 2024 at 2:30 PM in New York").
- * 
+ *
+ * <p><b>Grizzly extensions (not standard Python):</b>
+ * <pre>{@code
+ * now = now()                    // builtin; now("UTC") for timezone
+ * formatted = formatDate(dt, "dd/MM/yyyy")  // Java-style patterns
+ * }</pre>
+ *
  * <p><b>Python-compatible usage:</b>
  * <pre>{@code
- * // Current time (builtin)
- * now = now()
- * utcTime = now("UTC")
- * 
- * // From string (datetime module)
  * from datetime import datetime
  * date = datetime.strptime("2024-02-22", "%Y-%m-%d")
- * 
- * // Format (builtin or strftime)
- * formatted = formatDate(date, "dd/MM/yyyy")
- * formatted = date.strftime("%Y-%m-%d")
+ * formatted = date.strftime("%Y-%m-%d")  # Python %Y-%m-%d format
  * }</pre>
  */
 public final class DateTimeValue implements Value {

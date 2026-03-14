@@ -104,7 +104,7 @@ INPUT
 
 ## 3. Grizzly Template (Mapping)
 
-- **Safe navigation** `?.` and `?[` for optional root/node/location/scoreInfo
+- **Safe navigation** `?.` and `?[` for optional root/node/location/scoreInfo (Grizzly extensions; see [PYTHON_EXTENSIONS.md](PYTHON_EXTENSIONS.md))
 - **For loops** over `members` and `holdings`
 - **Conditionals** and **built-ins**: `len`, `range`, string concat, arithmetic
 

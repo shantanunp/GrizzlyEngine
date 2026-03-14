@@ -1,6 +1,8 @@
 # Grizzly Engine
 
-A lightweight Python-like template engine for JSON-to-JSON data transformation in Java.
+A Python interpreter in Java for JSON-to-JSON data transformation. Grizzly Engine was created to solve data mapping issues: write transformations in Python-like syntax and run them in Java.
+
+**Project goal:** Same `.py` file runs in both Grizzly Engine and Python — syntax and grammar are 100% Python except for four minimal extensions (`?.`, `?[`, `now()`, `formatDate()`). See [docs/PYTHON_EXTENSIONS.md](docs/PYTHON_EXTENSIONS.md).
 
 **Requirements:** Java 17+
 
@@ -18,6 +20,7 @@ A lightweight Python-like template engine for JSON-to-JSON data transformation i
 - [Logging](#logging)
 - [Architecture](#architecture)
 - [Error Handling](#error-handling)
+- [Periodic Code Review](#periodic-code-review)
 
 ---
 
@@ -71,7 +74,7 @@ A full **root → node** example with input schema, sample payloads (including n
 
 ## Safe Navigation Operators
 
-GrizzlyEngine extends Python syntax with safe navigation operators (`?.` and `?[`) to handle null values gracefully in nested data structures.
+Grizzly Engine extends Python with safe navigation operators (`?.` and `?[`) to handle null values in nested data structures. **These are not standard Python** — see [docs/PYTHON_EXTENSIONS.md](docs/PYTHON_EXTENSIONS.md) for the full list of extensions.
 
 ### Test Cases for Safe Navigation, Null Handling & Access Tracking
 ```text
@@ -305,15 +308,6 @@ for item in items:
         break
     process(item)
 
-# Switch (match expression against case values)
-switch status:
-    case "active":
-        OUTPUT["code"] = 1
-    case "pending":
-        OUTPUT["code"] = 2
-    default:
-        OUTPUT["code"] = 0
-
 # Match (Python 3.10+ style; case _ is default)
 match status_code:
     case 200:
@@ -388,14 +382,15 @@ isinstance(value, "str")
 ### DateTime Functions
 
 ```python
+# Grizzly extensions (not standard Python — see docs/PYTHON_EXTENSIONS.md)
 now()                              # Current datetime (builtin)
 now("UTC")                         # With timezone
-formatDate(dt, "dd/MM/yyyy")       # Format (builtin)
+formatDate(dt, "dd/MM/yyyy")       # Format (builtin; uses Java-style patterns)
 
 # Python-compatible: use datetime module
 from datetime import datetime
 dt = datetime.strptime("2024-02-22", "%Y-%m-%d")
-formatted = dt.strftime("%Y-%m-%d")
+formatted = dt.strftime("%Y-%m-%d")  # Python %Y-%m-%d format
 ```
 
 ---
@@ -689,20 +684,44 @@ try {
 
 ---
 
-## Python Compatibility Note
+## Python Compatibility
 
-GrizzlyEngine uses **Python-like** syntax with some extensions for JSON transformations:
+**Project goal:** Same `.py` file runs in both Grizzly Engine and Python. Syntax and grammar are 100% Python except for four minimal extensions. See [docs/PYTHON_EXTENSIONS.md](docs/PYTHON_EXTENSIONS.md) for details.
 
 | Feature | Python | GrizzlyEngine |
 |---------|--------|---------------|
 | Basic syntax | ✓ | ✓ |
-| Safe navigation (`?.`, `?[`) | ✗ | ✓ (extension) |
+| Safe navigation (`?.`, `?[`) | ✗ | ✓ (extension; **not Python**) |
+| `now()`, `formatDate()` | ✗ | ✓ (extension; **not Python**) |
 | Dict literals | ✓ | ✓ |
-| List comprehensions | ✓ | ✗ |
-| Classes | ✓ | ✗ |
-| Imports | Limited | Partial |
+| List comprehensions | ✓ | ✓ |
+| `match`/`case` | ✓ (3.10+) | ✓ |
+| Classes | ✓ | ✗ (not in scope) |
+| Imports | Full | Partial (re, datetime, decimal) |
 
-The safe navigation operators (`?.`, `?[`) are **not standard Python** but are commonly used in languages like Kotlin, C#, and JavaScript. They are added to GrizzlyEngine for ergonomic null handling in JSON transformation use cases.
+**Non-Python extensions (4 only):** `?.`, `?[`, `now()`, `formatDate()`. All other syntax is standard Python.
+
+---
+
+---
+
+## Periodic Code Review
+
+When adding or removing features, run a code review to stay aligned with project goals. Use this prompt:
+
+```
+Grizzly Engine is a Python interpreter in Java for data mapping. Project goals:
+1. Same .py file runs in Grizzly Engine AND standard Python
+2. Syntax and grammar must be 100% Python except for exactly 4 extensions
+3. Allowed extensions only: ?., ?[, now(), formatDate()
+4. No hacks; production-ready code
+
+Review checklist:
+- Have we added any new syntax or operators beyond those 4? If yes, remove or document in docs/PYTHON_EXTENSIONS.md
+- Is all new syntax valid Python (or one of the 4 extensions)?
+- Are JavaDocs and README updated for any behavior changes?
+- Does the change stay true to the data mapping use case?
+```
 
 ---
 

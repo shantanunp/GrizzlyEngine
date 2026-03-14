@@ -1,7 +1,10 @@
 package com.grizzly.core.lexer;
 
 /**
- * Token types for Grizzly Python subset
+ * Token types for Grizzly Python subset.
+ *
+ * <p>Reserved extensions (not standard Python): {@code SAFE_DOT} ({@code ?.}),
+ * {@code SAFE_LBRACKET} ({@code ?[}). See docs/PYTHON_EXTENSIONS.md.
  */
 public enum TokenType {
     // Keywords
@@ -13,8 +16,8 @@ public enum TokenType {
     RETURN,     // return
     FOR,        // for
     IN,         // in
-    SWITCH,     // switch
-    MATCH,      // match (Python 3.10+ style)
+    SWITCH,     // reserved; match (Python 3.10+) is used instead
+    MATCH,      // match (Python 3.10+ structural pattern matching)
     CASE,       // case
     DEFAULT,    // default
     BREAK,      // break

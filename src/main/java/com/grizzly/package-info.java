@@ -1,9 +1,10 @@
 /**
- * <h1>Grizzly Engine - Python-like Data Transformation for Java</h1>
- * 
- * <p>Grizzly Engine allows you to write data transformations in a Python-like
- * syntax and execute them in Java. Perfect for JSON-to-JSON mapping, data
- * normalization, and ETL pipelines.
+ * <h1>Grizzly Engine - Python Interpreter in Java for Data Mapping</h1>
+ *
+ * <p>Grizzly Engine is a Python interpreter in Java, created to solve data mapping
+ * issues. Write transformations in Python-like syntax and execute them in Java.
+ * Goal: same {@code .py} file runs in both Grizzly and standard Python; syntax
+ * and grammar are 100% Python except for four minimal extensions.
  * 
  * <h2>Why Grizzly?</h2>
  * 
