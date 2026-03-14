@@ -1,7 +1,6 @@
 package com.grizzly.core.parser.ast;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Method call expression: object.method(args)
@@ -30,13 +29,11 @@ import java.util.Map;
  * 
  * @param object Expression that evaluates to the object
  * @param methodName Name of the method to call
- * @param arguments List of positional argument expressions
- * @param keywordArgs Map of keyword argument names to expression values
+ * @param arguments List of CallArgument (Positional, Starred, Keyword, DoubleStarred)
  */
 public record MethodCall(
     Expression object,
     String methodName,
-    List<Expression> arguments,
-    Map<String, Expression> keywordArgs
+    List<CallArgument> arguments
 ) implements Expression {
 }

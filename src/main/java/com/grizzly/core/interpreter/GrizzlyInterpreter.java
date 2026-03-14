@@ -418,7 +418,8 @@ public class GrizzlyInterpreter {
     
     private Value executeFunctionCall(FunctionCall call, ExecutionContext context) {
         try {
-            return invokeFunction(call.functionName(), call.args(), call.keywordArgs(), context, call.lineNumber());
+            var evaluated = evaluateCallArguments(call.arguments(), context);
+            return invokeFunction(call.functionName(), evaluated.positional(), evaluated.keyword(), context, call.lineNumber());
         } catch (com.grizzly.core.exception.ReturnException e) {
             throw e;
         } catch (GrizzlyExecutionException e) {
@@ -431,10 +432,8 @@ public class GrizzlyInterpreter {
         }
     }
     
-    private Value invokeFunction(String name, List<Expression> argExprs,
-                                 Map<String, Expression> kwExprs, ExecutionContext context, int lineNumber) {
-        List<Value> args = evaluateArguments(argExprs, context);
-        Map<String, Value> kw = evaluateKeywordArguments(kwExprs, context);
+    private Value invokeFunction(String name, List<Value> args, Map<String, Value> kw,
+                                 ExecutionContext context, int lineNumber) {
         
         Value ctxVal = context.getOrNull(name);
         if (ctxVal instanceof CallableValue cv) {
@@ -452,19 +451,31 @@ public class GrizzlyInterpreter {
             );
         }
         
-        // Python-compliant: bind positional first, then keyword args
+        // Python-compliant: bind positional, *args, keyword, keyword-only
         ExecutionContext funcContext = context.createChild();
         List<String> params = func.params();
+        List<Expression> defaultExprs = func.defaultExprs();
+        int starParamIndex = func.starParamIndex();
         Map<String, Value> bound = new HashMap<>();
         
-        for (int i = 0; i < args.size(); i++) {
-            if (i >= params.size()) {
-                throw new GrizzlyExecutionException(
-                    name + "() takes " + params.size() + " positional argument(s) but " + args.size() + " were given",
-                    lineNumber
-                );
+        int numRegular = (starParamIndex >= 0) ? starParamIndex : params.size();
+        int argIdx = 0;
+        for (int i = 0; i < numRegular; i++) {
+            if (argIdx < args.size()) {
+                bound.put(params.get(i), args.get(argIdx++));
             }
-            bound.put(params.get(i), args.get(i));
+        }
+        if (starParamIndex >= 0) {
+            List<Value> starArgs = new ArrayList<>();
+            while (argIdx < args.size()) {
+                starArgs.add(args.get(argIdx++));
+            }
+            bound.put(params.get(starParamIndex), new ListValue(starArgs));
+        } else if (argIdx < args.size()) {
+            throw new GrizzlyExecutionException(
+                name + "() takes " + params.size() + " positional argument(s) but " + args.size() + " were given",
+                lineNumber
+            );
         }
         for (Map.Entry<String, Value> e : kw.entrySet()) {
             String p = e.getKey();
@@ -482,7 +493,6 @@ public class GrizzlyInterpreter {
             }
             bound.put(p, e.getValue());
         }
-        List<Expression> defaultExprs = func.defaultExprs();
         for (int i = 0; i < params.size(); i++) {
             String p = params.get(i);
             if (bound.containsKey(p)) {
@@ -491,7 +501,7 @@ public class GrizzlyInterpreter {
                 funcContext.set(p, evaluateExpression(defaultExprs.get(i), context));
             } else {
                 throw new GrizzlyExecutionException(
-                    name + "() missing required positional argument: '" + p + "'",
+                    name + "() missing required argument: '" + p + "'",
                     lineNumber
                 );
             }
@@ -507,6 +517,41 @@ public class GrizzlyInterpreter {
             result.put(e.getKey(), evaluateExpression(e.getValue(), context));
         }
         return result;
+    }
+    
+    /**
+     * Evaluate call arguments including *unpack and **unpack.
+     * Python: f(a, *list, b=1, **dict)
+     */
+    private record EvaluatedCallArgs(List<Value> positional, Map<String, Value> keyword) {}
+    
+    private EvaluatedCallArgs evaluateCallArguments(List<CallArgument> arguments, ExecutionContext context) {
+        if (arguments == null || arguments.isEmpty()) {
+            return new EvaluatedCallArgs(List.of(), Map.of());
+        }
+        List<Value> positional = new ArrayList<>();
+        Map<String, Value> keyword = new HashMap<>();
+        for (CallArgument arg : arguments) {
+            if (arg instanceof CallArgument.Positional pos) {
+                positional.add(evaluateExpression(pos.expr(), context));
+            } else if (arg instanceof CallArgument.Starred star) {
+                Value val = evaluateExpression(star.expr(), context);
+                positional.addAll(toIterableList(val, 0));
+            } else if (arg instanceof CallArgument.Keyword kw) {
+                keyword.put(kw.name(), evaluateExpression(kw.expr(), context));
+            } else if (arg instanceof CallArgument.DoubleStarred ds) {
+                Value val = evaluateExpression(ds.expr(), context);
+                if (!(val instanceof DictValue dict)) {
+                    throw new GrizzlyExecutionException(
+                        "** argument must be a dict, got " + val.typeName()
+                    );
+                }
+                for (Map.Entry<String, Value> e : dict.entries().entrySet()) {
+                    keyword.put(e.getKey(), e.getValue());
+                }
+            }
+        }
+        return new EvaluatedCallArgs(positional, keyword);
     }
     
     private Value executeIf(IfStatement ifStmt, ExecutionContext context) {
@@ -1182,17 +1227,15 @@ public class GrizzlyInterpreter {
                 String methodName = methodCall.methodName();
                 Map<String, BuiltinFunction> modFns = modules.getModule(moduleName);
                 if (modFns != null && modFns.containsKey(methodName)) {
-                    List<Value> args = evaluateArguments(methodCall.arguments(), context);
-                    Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
-                    return modFns.get(methodName).apply(args, kw);
+                    var ev = evaluateCallArguments(methodCall.arguments(), context);
+                    return modFns.get(methodName).apply(ev.positional(), ev.keyword());
                 }
                 DictValue modVal = modules.getModuleValue(moduleName);
                 if (modVal != null && modVal.containsKey(methodName)) {
                     Value attr = modVal.get(methodName);
                     if (attr instanceof CallableValue cv) {
-                        List<Value> args = evaluateArguments(methodCall.arguments(), context);
-                        Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
-                        return cv.call(args, kw);
+                        var ev = evaluateCallArguments(methodCall.arguments(), context);
+                        return cv.call(ev.positional(), ev.keyword());
                     }
                 }
                 if (modFns != null || modVal != null) {
@@ -1209,9 +1252,8 @@ public class GrizzlyInterpreter {
         String methodName = methodCall.methodName();
         
         if (obj instanceof CallableValue cv) {
-            List<Value> args = evaluateArguments(methodCall.arguments(), context);
-            Map<String, Value> kw = evaluateKeywordArguments(methodCall.keywordArgs(), context);
-            return cv.call(args, kw);
+            var ev = evaluateCallArguments(methodCall.arguments(), context);
+            return cv.call(ev.positional(), ev.keyword());
         }
         
         if (obj instanceof NullValue) {
@@ -1220,24 +1262,25 @@ public class GrizzlyInterpreter {
             );
         }
         
+        var ev = evaluateCallArguments(methodCall.arguments(), context);
         if (obj instanceof ListValue list) {
-            return evaluateListMethod(list, methodName, methodCall.arguments(), context);
+            return evaluateListMethod(list, methodName, ev.positional(), context);
         }
         
         if (obj instanceof StringValue str) {
-            return evaluateStringMethod(str, methodName, methodCall.arguments(), context);
+            return evaluateStringMethod(str, methodName, ev.positional(), context);
         }
         
         if (obj instanceof DictValue dict) {
-            return evaluateDictMethod(dict, methodName, methodCall.arguments(), context);
+            return evaluateDictMethod(dict, methodName, ev.positional(), context);
         }
         
         if (obj instanceof DateTimeValue dt) {
-            return evaluateDateTimeMethod(dt, methodName, methodCall.arguments(), context);
+            return evaluateDateTimeMethod(dt, methodName, ev.positional(), context);
         }
         
         if (obj instanceof ReMatchValue m) {
-            return evaluateReMatchMethod(m, methodName, methodCall.arguments(), context);
+            return evaluateReMatchMethod(m, methodName, ev.positional(), context);
         }
         
         throw new GrizzlyExecutionException(
@@ -1246,31 +1289,28 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateListMethod(ListValue list, String methodName, 
-                                     List<Expression> arguments, ExecutionContext context) {
-        List<Value> args = evaluateArguments(arguments, context);
+                                     List<Value> args, ExecutionContext context) {
         return ListMethods.evaluate(list, methodName, args);
     }
     
     private Value evaluateStringMethod(StringValue str, String methodName,
-                                       List<Expression> arguments, ExecutionContext context) {
-        List<Value> args = evaluateArguments(arguments, context);
+                                       List<Value> args, ExecutionContext context) {
         return StringMethods.evaluate(str, methodName, args);
     }
     
     private Value evaluateDictMethod(DictValue dict, String methodName,
-                                     List<Expression> arguments, ExecutionContext context) {
-        List<Value> args = evaluateArguments(arguments, context);
+                                     List<Value> args, ExecutionContext context) {
         return DictMethods.evaluate(dict, methodName, args);
     }
     
     private Value evaluateDateTimeMethod(DateTimeValue dt, String methodName,
-                                         List<Expression> arguments, ExecutionContext context) {
+                                         List<Value> arguments, ExecutionContext context) {
         return switch (methodName) {
             case "strftime" -> {
                 if (arguments.size() != 1) {
                     throw new GrizzlyExecutionException("strftime() takes exactly 1 argument, got " + arguments.size());
                 }
-                String fmt = asString(evaluateExpression(arguments.get(0), context));
+                String fmt = asString(arguments.get(0));
                 yield new StringValue(dt.format(pythonToJavaDateFormat(fmt)));
             }
             default -> throw new GrizzlyExecutionException(
@@ -1280,10 +1320,10 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateReMatchMethod(ReMatchValue m, String methodName,
-                                        List<Expression> arguments, ExecutionContext context) {
+                                        List<Value> arguments, ExecutionContext context) {
         return switch (methodName) {
             case "group" -> {
-                int idx = arguments.isEmpty() ? 0 : toInt(evaluateExpression(arguments.get(0), context));
+                int idx = arguments.isEmpty() ? 0 : toInt(arguments.get(0));
                 yield m.group(idx);
             }
             case "groups" -> m.groupsList();
@@ -1302,8 +1342,8 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
-        Map<String, Expression> kw = funcCall.keywordArgs();
-        return invokeFunction(funcCall.functionName(), funcCall.args(), kw != null ? kw : Map.of(), context, 0);
+        var evaluated = evaluateCallArguments(funcCall.arguments(), context);
+        return invokeFunction(funcCall.functionName(), evaluated.positional(), evaluated.keyword(), context, 0);
     }
     
     private void setTarget(Expression target, Value value, ExecutionContext context) {

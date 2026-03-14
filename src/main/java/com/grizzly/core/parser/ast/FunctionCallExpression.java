@@ -1,7 +1,6 @@
 package com.grizzly.core.parser.ast;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Function call as an expression: len(items), helper(x)
@@ -33,12 +32,10 @@ import java.util.Map;
  * }</pre>
  * 
  * @param functionName Name of the function to call (built-in or user-defined)
- * @param args List of positional argument expressions
- * @param keywordArgs Map of keyword argument names to expression values
+ * @param arguments List of CallArgument (Positional, Starred, Keyword, DoubleStarred)
  */
 public record FunctionCallExpression(
     String functionName,
-    List<Expression> args,
-    Map<String, Expression> keywordArgs
+    List<CallArgument> arguments
 ) implements Expression {
 }

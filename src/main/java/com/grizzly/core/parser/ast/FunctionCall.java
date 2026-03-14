@@ -1,12 +1,15 @@
 package com.grizzly.core.parser.ast;
 
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Function call as statement: print(x), helper(INPUT)
+ *
+ * @param arguments List of CallArgument (Positional, Starred, Keyword, DoubleStarred)
+ */
 public record FunctionCall(
     String functionName,
-    List<Expression> args,
-    Map<String, Expression> keywordArgs,
+    List<CallArgument> arguments,
     int lineNumber
 ) implements Statement {
 }

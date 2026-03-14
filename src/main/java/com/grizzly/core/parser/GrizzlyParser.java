@@ -299,30 +299,54 @@ public class GrizzlyParser {
         // Get function name
         String name = expect(TokenType.IDENTIFIER, "Expected function name").value();
         
-        // Parse parameters (Python: param [= expr], non-default params must come first)
+        // Parse parameters (Python: [*]param [= expr], *args, keyword-only params)
         expect(TokenType.LPAREN, "Expected '('");
         List<String> params = new ArrayList<>();
         List<Expression> defaultExprs = new ArrayList<>();
         boolean seenDefault = false;
+        int starParamIndex = -1;
         
         if (peek().type() != TokenType.RPAREN) {
             do {
-                String paramName = expect(TokenType.IDENTIFIER, "Expected parameter name").value();
-                if (peek().type() == TokenType.ASSIGN) {
-                    advance(); // consume '='
-                    seenDefault = true;
-                    defaultExprs.add(parseExpression());
-                } else {
-                    if (seenDefault) {
+                if (peek().type() == TokenType.STAR) {
+                    if (starParamIndex >= 0) {
                         throw new GrizzlyParseException(
-                            "non-default argument follows default argument",
+                            "invalid syntax: multiple * parameters",
                             peek().line(),
                             peek().column()
                         );
                     }
-                    defaultExprs.add(null);
+                    advance(); // consume *
+                    if (peek().type() == TokenType.IDENTIFIER) {
+                        String paramName = advance().value();
+                        params.add(paramName);
+                        defaultExprs.add(null);
+                        starParamIndex = params.size() - 1;
+                    } else {
+                        throw new GrizzlyParseException(
+                            "expected identifier after '*' in parameter",
+                            peek().line(),
+                            peek().column()
+                        );
+                    }
+                } else {
+                    String paramName = expect(TokenType.IDENTIFIER, "Expected parameter name").value();
+                    if (peek().type() == TokenType.ASSIGN) {
+                        advance(); // consume '='
+                        seenDefault = true;
+                        defaultExprs.add(parseExpression());
+                    } else {
+                        if (seenDefault) {
+                            throw new GrizzlyParseException(
+                                "non-default argument follows default argument",
+                                peek().line(),
+                                peek().column()
+                            );
+                        }
+                        defaultExprs.add(null);
+                    }
+                    params.add(paramName);
                 }
-                params.add(paramName);
                 if (peek().type() == TokenType.COMMA) {
                     advance();
                 }
@@ -349,7 +373,7 @@ public class GrizzlyParser {
             );
         }
         
-        return new FunctionDef(name, params, defaultExprs, body, lineNumber);
+        return new FunctionDef(name, params, defaultExprs, starParamIndex, body, lineNumber);
     }
     
     /**
@@ -441,7 +465,7 @@ public class GrizzlyParser {
                 String functionName = identToken.value();
                 advance(); // Skip '('
                 var callArgs = parseCallArguments();
-                return new FunctionCall(functionName, callArgs.positional(), callArgs.keyword(), lineNumber);
+                return new FunctionCall(functionName, callArgs, lineNumber);
             } else {
                 // Not a function call, restore position
                 position = savePos;
@@ -1127,7 +1151,7 @@ public class GrizzlyParser {
                     if (peek().type() == TokenType.LPAREN) {
                         advance(); // Skip '('
                         var callArgs = parseCallArguments();
-                        expr = new MethodCall(expr, attr, callArgs.positional(), callArgs.keyword());
+                        expr = new MethodCall(expr, attr, callArgs);
                     } else {
                         // Attribute access (with safe flag)
                         expr = new AttrAccess(expr, attr, safe);
@@ -1137,7 +1161,7 @@ public class GrizzlyParser {
                     // Function call expression: len(items), helper(x)
                     advance(); // Skip '('
                     var callArgs = parseCallArguments();
-                    expr = new FunctionCallExpression(name, callArgs.positional(), callArgs.keyword());
+                    expr = new FunctionCallExpression(name, callArgs);
                     // Continue chain to allow func(x).attr or func(x)[0]
                 } else {
                     break;
@@ -1306,7 +1330,7 @@ public class GrizzlyParser {
                 if (peek().type() == TokenType.LPAREN) {
                     advance();
                     var callArgs = parseCallArguments();
-                    expr = new MethodCall(expr, attr, callArgs.positional(), callArgs.keyword());
+                    expr = new MethodCall(expr, attr, callArgs);
                 } else {
                     expr = new AttrAccess(expr, attr, safe);
                 }
@@ -1412,26 +1436,42 @@ public class GrizzlyParser {
         return advance();
     }
     
-    /** Parse function/method call arguments: positional and keyword (id=expr). Python: no positional after keyword. */
-    private record ParseCallArgs(List<Expression> positional, Map<String, Expression> keyword) {}
-    
-    private ParseCallArgs parseCallArguments() {
+    /**
+     * Parse function/method call arguments.
+     * Python: positional (including *iterable), keyword (id=expr), **dict.
+     * No positional after keyword. ** must be last.
+     */
+    private List<CallArgument> parseCallArguments() {
         skipNewlinesAndIndentDedent();
-        List<Expression> positional = new ArrayList<>();
-        Map<String, Expression> keyword = new LinkedHashMap<>();
+        List<CallArgument> args = new ArrayList<>();
         boolean seenKeyword = false;
         while (peek().type() != TokenType.RPAREN) {
-            if (seenKeyword || (peek().type() == TokenType.IDENTIFIER && peekNext().type() == TokenType.ASSIGN)) {
+            if (peek().type() == TokenType.DOUBLESTAR) {
+                advance(); // consume **
+                Expression expr = parseExpression();
+                args.add(new CallArgument.DoubleStarred(expr));
+                break; // ** must be last
+            }
+            if (peek().type() == TokenType.IDENTIFIER && peekNext().type() == TokenType.ASSIGN) {
                 String name = expect(TokenType.IDENTIFIER, "Expected keyword argument name").value();
                 expect(TokenType.ASSIGN, "Expected '=' in keyword argument");
                 Expression value = parseExpression();
-                if (keyword.containsKey(name)) {
+                if (args.stream().anyMatch(a -> a instanceof CallArgument.Keyword k && k.name().equals(name))) {
                     throw new GrizzlyParseException("keyword argument repeated: " + name, peek().line(), peek().column());
                 }
-                keyword.put(name, value);
+                args.add(new CallArgument.Keyword(name, value));
                 seenKeyword = true;
+            } else if (seenKeyword) {
+                throw new GrizzlyParseException(
+                    "positional argument follows keyword argument",
+                    peek().line(), peek().column()
+                );
+            } else if (peek().type() == TokenType.STAR) {
+                advance(); // consume *
+                Expression expr = parseExpression();
+                args.add(new CallArgument.Starred(expr));
             } else {
-                positional.add(parseExpression());
+                args.add(new CallArgument.Positional(parseExpression()));
             }
             skipNewlinesAndIndentDedent();
             if (peek().type() == TokenType.COMMA) {
@@ -1442,7 +1482,7 @@ public class GrizzlyParser {
             }
         }
         expect(TokenType.RPAREN, "Expected ')'");
-        return new ParseCallArgs(positional, keyword);
+        return args;
     }
     
     private void skipNewlines() {
