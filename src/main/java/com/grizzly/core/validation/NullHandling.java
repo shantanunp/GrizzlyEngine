@@ -6,6 +6,7 @@ package com.grizzly.core.validation;
  * <p>Choose the appropriate mode based on your use case:
  * 
  * <table border="1">
+ * <caption>Null handling modes</caption>
  *   <tr><th>Mode</th><th>On Null</th><th>Tracking</th><th>Use Case</th></tr>
  *   <tr><td>STRICT</td><td>Throws exception</td><td>Optional</td><td>Development</td></tr>
  *   <tr><td>SAFE</td><td>Returns null</td><td>Yes</td><td>Production</td></tr>

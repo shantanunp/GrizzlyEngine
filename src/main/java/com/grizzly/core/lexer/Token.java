@@ -3,8 +3,13 @@ package com.grizzly.core.lexer;
 import java.util.Objects;
 
 /**
- * Represents a single token in the Python template
- * Using Java Record (JDK 16+) for immutability and conciseness
+ * Represents a single token in the Python template.
+ * Using Java Record (JDK 16+) for immutability and conciseness.
+ *
+ * @param type   Token type (e.g., IDENTIFIER, NUMBER)
+ * @param value  Token value for literals (e.g., "42" for NUMBER); null for operators
+ * @param line   Line number (1-based)
+ * @param column Column number (1-based)
  */
 public record Token(TokenType type, String value, int line, int column) {
     

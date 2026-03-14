@@ -1,5 +1,5 @@
 /**
- * <h1>Logging Package - Debug and Trace Utilities</h1>
+ * Logging Package - Debug and Trace Utilities.
  * 
  * <p>This package provides logging utilities to help understand and debug
  * the Grizzly Engine compilation and execution pipeline.
@@ -18,6 +18,7 @@
  * <h2>Log Levels</h2>
  * 
  * <table border="1">
+ * <caption>Log levels</caption>
  *   <tr><th>Level</th><th>Use Case</th><th>Example Output</th></tr>
  *   <tr><td>TRACE</td><td>Very detailed</td><td>Every variable read/write</td></tr>
  *   <tr><td>DEBUG</td><td>Development</td><td>Tokens, AST nodes, function calls</td></tr>
@@ -59,6 +60,6 @@
  * String display = GrizzlyLogger.formatValue(someValue);
  * }</pre>
  * 
- * @see com.grizzly.logging.GrizzlyLogger Main logging class
+ * @see com.grizzly.core.logging.GrizzlyLogger Main logging class
  */
 package com.grizzly.core.logging;

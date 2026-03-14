@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * <h1>Lexer (Tokenizer) - Step 1 of the Compilation Pipeline</h1>
+ * Lexer (Tokenizer) - Step 1 of the Compilation Pipeline.
  * 
  * <p>The Lexer is the first step in transforming your Python-like template code into
  * executable instructions. It reads characters one-by-one and groups them into meaningful
@@ -72,6 +72,7 @@ import java.util.Map;
  * <h2>Token Types</h2>
  * 
  * <table border="1">
+ * <caption>Token type categories</caption>
  *   <tr><th>Category</th><th>Examples</th><th>Token Type</th></tr>
  *   <tr><td>Keywords</td><td>def, if, for, return</td><td>DEF, IF, FOR, RETURN</td></tr>
  *   <tr><td>Identifiers</td><td>transform, OUTPUT, x</td><td>IDENTIFIER</td></tr>
@@ -128,7 +129,7 @@ import java.util.Map;
  * 
  * @see Token The token class containing type, value, and position
  * @see TokenType Enum of all possible token types
- * @see GrizzlyParser The next step: converts tokens to AST
+ * @see com.grizzly.core.parser.GrizzlyParser The next step: converts tokens to AST
  */
 public class GrizzlyLexer {
     
@@ -341,7 +342,7 @@ public class GrizzlyLexer {
      *   <li>Comments (skipped)</li>
      * </ul>
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * GrizzlyLexer lexer = new GrizzlyLexer("x = 42");
      * List<Token> tokens = lexer.tokenize();

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * <h1>Parser - Step 2 of the Compilation Pipeline</h1>
+ * Parser - Step 2 of the Compilation Pipeline.
  * 
  * <p>The Parser takes the flat list of tokens from the Lexer and builds a hierarchical
  * tree structure called an <b>Abstract Syntax Tree (AST)</b>. This tree represents
@@ -183,7 +183,7 @@ import java.util.Map;
  * }</pre>
  * 
  * @see GrizzlyLexer The previous step: converts source to tokens
- * @see com.grizzly.interpreter.GrizzlyInterpreter The next step: executes the AST
+ * @see com.grizzly.core.interpreter.GrizzlyInterpreter The next step: executes the AST
  * @see Program The root AST node containing all functions
  */
 public class GrizzlyParser {
@@ -205,7 +205,7 @@ public class GrizzlyParser {
      *   <li>One or more function definitions (at least 'transform')</li>
      * </ul>
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * // Parse tokens into AST
      * GrizzlyParser parser = new GrizzlyParser(tokens);
@@ -504,7 +504,7 @@ public class GrizzlyParser {
      *     statements
      * }</pre>
      * 
-     * <p><b>Example:</b>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * if x < 0:
      *     status = "negative"

@@ -111,7 +111,7 @@ public class GrizzlyTemplate {
      * <p>This method records all property accesses during transformation,
      * allowing you to see which paths failed due to null values and why.
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * TransformationResult result = template.executeWithValidation(input);
      * 

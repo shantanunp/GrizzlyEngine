@@ -1,5 +1,5 @@
 /**
- * <h1>Types Package - Type-Safe Value Hierarchy</h1>
+ * Types Package - Type-Safe Value Hierarchy.
  * 
  * <p>This package defines the type-safe value classes used throughout the interpreter.
  * Instead of using raw {@code Object} types, all runtime values are wrapped in
@@ -46,7 +46,7 @@
  * 
  * <h2>Conversion to Java Types</h2>
  * 
- * <p>Use {@link com.grizzly.interpreter.ValueConverter} to convert between
+ * <p>Use {@link com.grizzly.core.types.ValueConverter} to convert between
  * Value types and standard Java types:
  * 
  * <pre>{@code
@@ -59,7 +59,7 @@
  * }</pre>
  * 
  * @see com.grizzly.core.types.Value Base interface for all values
- * @see com.grizzly.interpreter.ValueConverter Java ↔ Value conversion
- * @see com.grizzly.interpreter.ValueUtils Utility methods
+ * @see com.grizzly.core.types.ValueConverter Java ↔ Value conversion
+ * @see com.grizzly.core.interpreter.ValueUtils Utility methods
  */
 package com.grizzly.core.types;

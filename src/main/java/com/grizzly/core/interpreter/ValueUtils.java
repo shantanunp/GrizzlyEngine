@@ -200,7 +200,7 @@ public final class ValueUtils {
     /**
      * Compare two values for ordering (Python-compliant: TypeError for mixed types).
      *
-     * @return negative if left < right, 0 if equal, positive if left > right
+     * @return negative if left &lt; right, 0 if equal, positive if left &gt; right
      * @throws GrizzlyExecutionException (TypeError) for incompatible types
      */
     public static int compareForSort(Value left, Value right) {
@@ -236,7 +236,7 @@ public final class ValueUtils {
     /**
      * Compare two numeric values (for arithmetic comparisons).
      *
-     * @return negative if left < right, 0 if equal, positive if left > right
+     * @return negative if left &lt; right, 0 if equal, positive if left &gt; right
      */
     public static int compareNumeric(Value left, Value right) {
         double l = toDouble(left);

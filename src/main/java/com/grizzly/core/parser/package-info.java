@@ -1,5 +1,5 @@
 /**
- * <h1>Parser Package - Step 2: AST Construction</h1>
+ * Parser Package - Step 2: AST Construction.
  * 
  * <p>The parser takes tokens from the lexer and builds an Abstract Syntax Tree (AST).
  * This tree represents the grammatical structure of your code.

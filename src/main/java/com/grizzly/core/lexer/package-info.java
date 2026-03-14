@@ -1,5 +1,5 @@
 /**
- * <h1>Lexer Package - Step 1: Tokenization</h1>
+ * Lexer Package - Step 1: Tokenization.
  * 
  * <p>The lexer (tokenizer) is the first step in the compilation pipeline.
  * It reads source code character-by-character and groups them into tokens.
@@ -16,6 +16,7 @@
  * <h2>Token Types</h2>
  * 
  * <table border="1">
+ * <caption>Token type categories</caption>
  *   <tr><th>Category</th><th>Examples</th><th>Token Type</th></tr>
  *   <tr><td>Keywords</td><td>def, if, for, return</td><td>DEF, IF, FOR, RETURN</td></tr>
  *   <tr><td>Identifiers</td><td>transform, OUTPUT, x</td><td>IDENTIFIER</td></tr>

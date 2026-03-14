@@ -15,7 +15,7 @@ import java.util.Map;
 import static com.grizzly.core.interpreter.ValueUtils.*;
 
 /**
- * <h1>Interpreter - Step 3 of the Compilation Pipeline</h1>
+ * Interpreter - Step 3 of the Compilation Pipeline.
  * 
  * <p>The Interpreter takes the AST (Abstract Syntax Tree) produced by the Parser
  * and <b>executes</b> it. It walks through each node in the tree and performs
@@ -98,6 +98,7 @@ import static com.grizzly.core.interpreter.ValueUtils.*;
  * <p>The interpreter uses a type-safe {@link Value} hierarchy instead of raw Objects:
  * 
  * <table border="1">
+ * <caption>Type mapping</caption>
  *   <tr><th>Python Type</th><th>Java Value Class</th><th>Example</th></tr>
  *   <tr><td>str</td><td>{@link StringValue}</td><td>"hello"</td></tr>
  *   <tr><td>int/float</td><td>{@link NumberValue}</td><td>42, 3.14</td></tr>
@@ -203,7 +204,7 @@ public class GrizzlyInterpreter {
      * It finds the 'transform' function, binds the input data to INPUT,
      * executes the function body, and returns the result.
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * GrizzlyInterpreter interpreter = new GrizzlyInterpreter(program);
      * 
@@ -231,7 +232,7 @@ public class GrizzlyInterpreter {
      * It avoids the Map-to-DictValue conversion overhead when working
      * directly with the type-safe Value hierarchy.
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * // Used by format handlers
      * DictValue input = xmlReader.read(xmlString);
@@ -255,7 +256,7 @@ public class GrizzlyInterpreter {
      * <p>This method provides full access tracking for validation reports.
      * Use this when you need to know which property accesses failed.
      * 
-     * <h3>Example:</h3>
+     * <p><b>Example:</b></p>
      * <pre>{@code
      * AccessTracker tracker = new AccessTracker(true);
      * DictValue output = interpreter.executeTyped(input, tracker);

@@ -1,5 +1,5 @@
 /**
- * <h1>AST Package - Abstract Syntax Tree Node Definitions</h1>
+ * AST Package - Abstract Syntax Tree Node Definitions.
  * 
  * <p>This package contains all the node types that make up the Abstract Syntax Tree.
  * Each node type represents a different construct in the Grizzly language.
@@ -49,7 +49,7 @@
  *         └── ReturnStatement(Identifier("OUTPUT"))
  * }</pre>
  * 
- * @see com.grizzly.parser.GrizzlyParser Builds the AST from tokens
- * @see com.grizzly.interpreter.GrizzlyInterpreter Executes the AST
+ * @see com.grizzly.core.parser.GrizzlyParser Builds the AST from tokens
+ * @see com.grizzly.core.interpreter.GrizzlyInterpreter Executes the AST
  */
 package com.grizzly.core.parser.ast;

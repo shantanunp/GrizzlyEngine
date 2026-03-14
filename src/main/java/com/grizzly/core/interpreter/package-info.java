@@ -1,5 +1,5 @@
 /**
- * <h1>Interpreter Package - Step 3: Execution</h1>
+ * Interpreter Package - Step 3: Execution.
  * 
  * <p>The interpreter walks the AST (Abstract Syntax Tree) and executes each node.
  * It maintains variable state and produces the final output.
@@ -35,6 +35,7 @@
  * <p>All values use the {@link com.grizzly.core.types.Value} hierarchy:
  * 
  * <table border="1">
+ * <caption>Type mapping</caption>
  *   <tr><th>Python Type</th><th>Java Type</th></tr>
  *   <tr><td>str</td><td>StringValue</td></tr>
  *   <tr><td>int/float</td><td>NumberValue</td></tr>
@@ -47,14 +48,14 @@
  * <h2>Key Classes</h2>
  * 
  * <ul>
- *   <li>{@link com.grizzly.interpreter.GrizzlyInterpreter} - Main interpreter</li>
- *   <li>{@link com.grizzly.interpreter.ExecutionContext} - Variable storage</li>
- *   <li>{@link com.grizzly.interpreter.BuiltinRegistry} - Built-in functions</li>
- *   <li>{@link com.grizzly.interpreter.ValueUtils} - Utility methods</li>
+ *   <li>{@link com.grizzly.core.interpreter.GrizzlyInterpreter} - Main interpreter</li>
+ *   <li>{@link com.grizzly.core.interpreter.ExecutionContext} - Variable storage</li>
+ *   <li>{@link com.grizzly.core.interpreter.BuiltinRegistry} - Built-in functions</li>
+ *   <li>{@link com.grizzly.core.interpreter.ValueUtils} - Utility methods</li>
  * </ul>
- * 
- * @see com.grizzly.interpreter.GrizzlyInterpreter Main interpreter class
- * @see com.grizzly.types Type-safe value classes
- * @see com.grizzly.parser The previous step: parsing
+ *
+ * @see com.grizzly.core.interpreter.GrizzlyInterpreter Main interpreter class
+ * @see com.grizzly.core.types Type-safe value classes
+ * @see com.grizzly.core.parser The previous step: parsing
  */
 package com.grizzly.core.interpreter;
