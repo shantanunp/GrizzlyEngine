@@ -57,6 +57,51 @@ class GrizzlyLexerTest {
     }
     
     @Test
+    void shouldTokenizeTripleQuotedDoubleQuoteString() {
+        String code = "x = \"\"\"hello\\nworld\"\"\"";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.STRING))
+            .anyMatch(t -> "hello\nworld".equals(t.value()));
+    }
+    
+    @Test
+    void shouldTokenizeTripleQuotedSingleQuoteString() {
+        String code = "x = '''line1\nline2'''";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.STRING))
+            .anyMatch(t -> "line1\nline2".equals(t.value()));
+    }
+    
+    @Test
+    void shouldTokenizeMultilineTripleQuotedString() {
+        String code = "x = \"\"\"\nfirst line\nsecond line\n\"\"\"";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.STRING))
+            .anyMatch(t -> t.value().equals("\nfirst line\nsecond line\n"));
+    }
+    
+    @Test
+    void shouldTokenizeRawTripleQuotedString() {
+        String code = "x = r\"\"\"\\n literal\"\"\"";
+        
+        GrizzlyLexer lexer = new GrizzlyLexer(code);
+        List<Token> tokens = lexer.tokenize();
+        
+        // Raw: no escape processing, so \n stays as backslash followed by n
+        assertThat(tokens.stream().filter(t -> t.type() == TokenType.STRING))
+            .anyMatch(t -> "\\n literal".equals(t.value()));
+    }
+    
+    @Test
     void shouldTokenizeNumbers() {
         String code = "age = 42";
         

@@ -614,10 +614,70 @@ public class GrizzlyLexer {
         }
     }
     
+    /** Returns true if at position we have three consecutive quotes (\"\"\" or '''). */
+    private boolean isTripleQuote(char quote) {
+        return peekChar(1) == quote && peekChar(2) == quote;
+    }
+    
+    /**
+     * Tokenize triple-quoted string: \"\"\"...\"\"\" or '''...''' .
+     * Content may span multiple lines; newlines are preserved.
+     */
+    private void tokenizeTripleQuotedString(char quote, boolean raw) {
+        int startColumn = column;
+        advance(); advance(); advance(); // Skip opening """
+        
+        StringBuilder content = new StringBuilder();
+        
+        while (!isAtEnd()) {
+            if (currentChar() == quote && peekChar(1) == quote && peekChar(2) == quote) {
+                advance(); advance(); advance(); // Skip closing """
+                addToken(TokenType.STRING, content.toString(), startColumn);
+                return;
+            }
+            if (currentChar() == '\\' && !raw) {
+                content.append(handleEscapeSequence());
+            } else {
+                content.append(currentChar());
+                advance();
+            }
+        }
+        throw error("Unterminated triple-quoted string", startColumn);
+    }
+    
+    /**
+     * Tokenize triple-quoted f-string: f\"\"\"...\"\"\" or f'''...''' .
+     */
+    private void tokenizeTripleQuotedFString(char quote) {
+        int startColumn = column;
+        advance(); advance(); advance(); // Skip opening """
+        
+        StringBuilder content = new StringBuilder();
+        
+        while (!isAtEnd()) {
+            if (currentChar() == quote && peekChar(1) == quote && peekChar(2) == quote) {
+                advance(); advance(); advance(); // Skip closing """
+                addToken(TokenType.FSTRING, content.toString(), startColumn);
+                return;
+            }
+            if (currentChar() == '\\') {
+                content.append(handleEscapeSequence());
+            } else {
+                content.append(currentChar());
+                advance();
+            }
+        }
+        throw error("Unterminated triple-quoted f-string", startColumn);
+    }
+    
     /**
      * Tokenize string literal ("hello" or 'world')
      */
     private void tokenizeString(char quote) {
+        if (isTripleQuote(quote)) {
+            tokenizeTripleQuotedString(quote, false);
+            return;
+        }
         int startColumn = column;
         advance(); // Skip opening quote
         
@@ -657,6 +717,10 @@ public class GrizzlyLexer {
      * }</pre>
      */
     private void tokenizeRawString(char quote) {
+        if (isTripleQuote(quote)) {
+            tokenizeTripleQuotedString(quote, true);
+            return;
+        }
         int startColumn = column;
         advance(); // Skip opening quote
         
@@ -750,6 +814,10 @@ public class GrizzlyLexer {
      * Tokenize f-string: f"..." or f'...' with {expr} interpolations (content stored as-is).
      */
     private void tokenizeFString(char quote) {
+        if (isTripleQuote(quote)) {
+            tokenizeTripleQuotedFString(quote);
+            return;
+        }
         int startColumn = column;
         advance(); // skip opening quote
         StringBuilder content = new StringBuilder();
@@ -915,6 +983,12 @@ public class GrizzlyLexer {
     
     private char currentChar() {
         return isAtEnd() ? EOF_CHAR : source.charAt(position);
+    }
+    
+    /** Peek character at offset from current position without consuming. Returns EOF_CHAR if out of bounds. */
+    private char peekChar(int offset) {
+        int idx = position + offset;
+        return idx >= source.length() ? EOF_CHAR : source.charAt(idx);
     }
     
     private void advance() {

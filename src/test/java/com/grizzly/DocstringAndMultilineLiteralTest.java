@@ -56,6 +56,23 @@ class DocstringAndMultilineLiteralTest {
         }
 
         @Test
+        @DisplayName("triple-quoted string as value compiles and runs")
+        void tripleQuotedStringAsValue() {
+            String template = """
+                def transform(INPUT):
+                    OUTPUT = {}
+                    OUTPUT["description"] = '''line one
+                line two'''
+                    return OUTPUT
+                """;
+            JsonTemplate compiled = JsonTemplate.compile(template);
+            String out = compiled.transform("{}");
+            assertThat(out).contains("\"description\"");
+            assertThat(out).contains("line one");
+            assertThat(out).contains("line two");
+        }
+
+        @Test
         @DisplayName("bare string literal as statement is accepted")
         void bareStringLiteral() {
             String template = """
