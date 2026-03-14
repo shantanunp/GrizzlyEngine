@@ -6,6 +6,7 @@ import com.grizzly.core.types.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static com.grizzly.core.interpreter.ValueUtils.*;
 
@@ -24,10 +25,13 @@ public final class ListMethods {
      * 
      * @param list The list value
      * @param methodName The method name
-     * @param args Evaluated arguments
+     * @param args Evaluated positional arguments
+     * @param kw Keyword arguments (for sort: key=, reverse=)
+     * @param invoker Invoker for calling key function in sort
      * @return The result
      */
-    public static Value evaluate(ListValue list, String methodName, List<Value> args) {
+    public static Value evaluate(ListValue list, String methodName, List<Value> args,
+                                 Map<String, Value> kw, CallableInvoker invoker) {
         return switch (methodName) {
             // Mutating methods
             case "append" -> append(list, args);
@@ -37,7 +41,7 @@ public final class ListMethods {
             case "remove" -> remove(list, args);
             case "clear" -> clear(list);
             case "reverse" -> reverse(list);
-            case "sort" -> sort(list, args);
+            case "sort" -> sort(list, args, kw, invoker);
             
             // Non-mutating methods
             case "index" -> index(list, args);
@@ -123,18 +127,31 @@ public final class ListMethods {
         return NullValue.INSTANCE;
     }
     
-    private static Value sort(ListValue list, List<Value> args) {
+    private static Value sort(ListValue list, List<Value> args, Map<String, Value> kw,
+                              CallableInvoker invoker) {
         boolean reverse = false;
-        if (!args.isEmpty()) {
+        if (kw != null && kw.containsKey("reverse")) {
+            reverse = kw.get("reverse").isTruthy();
+        } else if (!args.isEmpty()) {
             reverse = args.get(0).isTruthy();
         }
         
+        Value keyFn = (kw != null) ? kw.get("key") : null;
         final boolean descending = reverse;
         
-        list.items().sort((a, b) -> {
-            int cmp = ValueUtils.compareForSort(a, b);
-            return descending ? -cmp : cmp;
-        });
+        if (keyFn != null && keyFn.isTruthy() && invoker != null) {
+            list.items().sort((a, b) -> {
+                Value ka = invoker.invoke(keyFn, List.of(a), Map.of());
+                Value kb = invoker.invoke(keyFn, List.of(b), Map.of());
+                int cmp = ValueUtils.compareForSort(ka, kb);
+                return descending ? -cmp : cmp;
+            });
+        } else {
+            list.items().sort((a, b) -> {
+                int cmp = ValueUtils.compareForSort(a, b);
+                return descending ? -cmp : cmp;
+            });
+        }
         
         return NullValue.INSTANCE;
     }

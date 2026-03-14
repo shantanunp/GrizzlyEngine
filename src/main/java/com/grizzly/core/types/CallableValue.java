@@ -1,5 +1,6 @@
 package com.grizzly.core.types;
 
+import com.grizzly.core.interpreter.CallableInvoker;
 import com.grizzly.core.interpreter.GrizzlyInterpreter.BuiltinFunction;
 
 import java.util.List;
@@ -21,7 +22,7 @@ public record CallableValue(BuiltinFunction fn) implements Value {
         return true;
     }
 
-    public Value call(List<Value> args, Map<String, Value> keywordArgs) {
-        return fn.apply(args, keywordArgs != null ? keywordArgs : Map.of());
+    public Value call(List<Value> args, Map<String, Value> keywordArgs, CallableInvoker invoker) {
+        return fn.apply(args, keywordArgs != null ? keywordArgs : Map.of(), invoker);
     }
 }

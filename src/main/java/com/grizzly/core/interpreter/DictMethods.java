@@ -25,9 +25,11 @@ public final class DictMethods {
      * @param dict The dict value
      * @param methodName The method name
      * @param args Evaluated arguments
+     * @param invoker Invoker for calling callable attributes (e.g. datetime.now)
      * @return The result
      */
-    public static Value evaluate(DictValue dict, String methodName, List<Value> args) {
+    public static Value evaluate(DictValue dict, String methodName, List<Value> args,
+                                 CallableInvoker invoker) {
         Value result = switch (methodName) {
             case "get" -> get(dict, args);
             case "keys" -> keys(dict, args);
@@ -45,7 +47,7 @@ public final class DictMethods {
         if (dict.containsKey(methodName)) {
             Value v = dict.get(methodName);
             if (v instanceof CallableValue cv) {
-                return cv.call(args, java.util.Map.of());
+                return cv.call(args, java.util.Map.of(), invoker);
             }
         }
         throw new GrizzlyExecutionException("Unknown dict method: " + methodName);

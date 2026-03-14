@@ -20,7 +20,7 @@ class DictMethodsTest {
     @DisplayName("get() returns value for existing key")
     void getExistingKey() {
         DictValue dict = createDict("name", "John", "age", 30);
-        Value result = DictMethods.evaluate(dict, "get", List.of(new StringValue("name")));
+        Value result = DictMethods.evaluate(dict, "get", List.of(new StringValue("name")), null);
         
         assertThat(((StringValue) result).value()).isEqualTo("John");
     }
@@ -29,7 +29,7 @@ class DictMethodsTest {
     @DisplayName("get() returns None for missing key")
     void getMissingKey() {
         DictValue dict = createDict("name", "John");
-        Value result = DictMethods.evaluate(dict, "get", List.of(new StringValue("age")));
+        Value result = DictMethods.evaluate(dict, "get", List.of(new StringValue("age")), null);
         
         assertThat(result).isEqualTo(NullValue.INSTANCE);
     }
@@ -39,7 +39,7 @@ class DictMethodsTest {
     void getMissingKeyWithDefault() {
         DictValue dict = createDict("name", "John");
         Value result = DictMethods.evaluate(dict, "get", 
-            List.of(new StringValue("age"), NumberValue.of(0)));
+            List.of(new StringValue("age"), NumberValue.of(0)), null);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(0);
     }
@@ -50,7 +50,7 @@ class DictMethodsTest {
     @DisplayName("keys() returns list of all keys")
     void keys() {
         DictValue dict = createDict("a", 1, "b", 2, "c", 3);
-        Value result = DictMethods.evaluate(dict, "keys", List.of());
+        Value result = DictMethods.evaluate(dict, "keys", List.of(), null);
         
         assertThat(result).isInstanceOf(ListValue.class);
         ListValue keys = (ListValue) result;
@@ -63,7 +63,7 @@ class DictMethodsTest {
     @DisplayName("values() returns list of all values")
     void values() {
         DictValue dict = createDict("a", 1, "b", 2, "c", 3);
-        Value result = DictMethods.evaluate(dict, "values", List.of());
+        Value result = DictMethods.evaluate(dict, "values", List.of(), null);
         
         assertThat(result).isInstanceOf(ListValue.class);
         ListValue values = (ListValue) result;
@@ -76,7 +76,7 @@ class DictMethodsTest {
     @DisplayName("items() returns list of [key, value] pairs")
     void items() {
         DictValue dict = createDict("name", "John", "age", 30);
-        Value result = DictMethods.evaluate(dict, "items", List.of());
+        Value result = DictMethods.evaluate(dict, "items", List.of(), null);
         
         assertThat(result).isInstanceOf(ListValue.class);
         ListValue items = (ListValue) result;
@@ -93,7 +93,7 @@ class DictMethodsTest {
     @DisplayName("pop() removes and returns value for key")
     void pop() {
         DictValue dict = createDict("a", 1, "b", 2);
-        Value result = DictMethods.evaluate(dict, "pop", List.of(new StringValue("a")));
+        Value result = DictMethods.evaluate(dict, "pop", List.of(new StringValue("a")), null);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(1);
         assertThat(dict.containsKey("a")).isFalse();
@@ -105,7 +105,7 @@ class DictMethodsTest {
     void popMissingWithDefault() {
         DictValue dict = createDict("a", 1);
         Value result = DictMethods.evaluate(dict, "pop", 
-            List.of(new StringValue("z"), NumberValue.of(-1)));
+            List.of(new StringValue("z"), NumberValue.of(-1)), null);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(-1);
     }
@@ -114,7 +114,7 @@ class DictMethodsTest {
     @DisplayName("pop() throws KeyError for missing key without default")
     void popMissingWithoutDefault() {
         DictValue dict = createDict("a", 1);
-        assertThatThrownBy(() -> DictMethods.evaluate(dict, "pop", List.of(new StringValue("z"))))
+        assertThatThrownBy(() -> DictMethods.evaluate(dict, "pop", List.of(new StringValue("z")), null))
             .isInstanceOf(GrizzlyExecutionException.class)
             .hasMessageContaining("KeyError");
     }
@@ -127,7 +127,7 @@ class DictMethodsTest {
         DictValue dict1 = createDict("a", 1, "b", 2);
         DictValue dict2 = createDict("b", 20, "c", 30);
         
-        DictMethods.evaluate(dict1, "update", List.of(dict2));
+        DictMethods.evaluate(dict1, "update", List.of(dict2), null);
         
         assertThat(dict1.size()).isEqualTo(3);
         assertThat(((NumberValue) dict1.get("a")).asInt()).isEqualTo(1);
@@ -141,7 +141,7 @@ class DictMethodsTest {
     @DisplayName("clear() removes all entries")
     void clear() {
         DictValue dict = createDict("a", 1, "b", 2);
-        DictMethods.evaluate(dict, "clear", List.of());
+        DictMethods.evaluate(dict, "clear", List.of(), null);
         
         assertThat(dict.size()).isEqualTo(0);
     }
@@ -152,7 +152,7 @@ class DictMethodsTest {
     @DisplayName("copy() creates shallow copy")
     void copy() {
         DictValue original = createDict("a", 1, "b", 2);
-        Value result = DictMethods.evaluate(original, "copy", List.of());
+        Value result = DictMethods.evaluate(original, "copy", List.of(), null);
         
         assertThat(result).isInstanceOf(DictValue.class);
         DictValue copy = (DictValue) result;
@@ -173,7 +173,7 @@ class DictMethodsTest {
     void setdefaultExisting() {
         DictValue dict = createDict("a", 1);
         Value result = DictMethods.evaluate(dict, "setdefault", 
-            List.of(new StringValue("a"), NumberValue.of(99)));
+            List.of(new StringValue("a"), NumberValue.of(99)), null);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(1);
         assertThat(((NumberValue) dict.get("a")).asInt()).isEqualTo(1); // Unchanged
@@ -184,7 +184,7 @@ class DictMethodsTest {
     void setdefaultMissing() {
         DictValue dict = createDict("a", 1);
         Value result = DictMethods.evaluate(dict, "setdefault", 
-            List.of(new StringValue("b"), NumberValue.of(99)));
+            List.of(new StringValue("b"), NumberValue.of(99)), null);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(99);
         assertThat(dict.containsKey("b")).isTrue();
@@ -196,7 +196,7 @@ class DictMethodsTest {
     void setdefaultNoDefault() {
         DictValue dict = createDict("a", 1);
         Value result = DictMethods.evaluate(dict, "setdefault", 
-            List.of(new StringValue("b")));
+            List.of(new StringValue("b")), null);
         
         assertThat(result).isEqualTo(NullValue.INSTANCE);
         assertThat(dict.get("b")).isEqualTo(NullValue.INSTANCE);

@@ -32,6 +32,7 @@ public sealed interface Value permits
     DateTimeValue, 
     DecimalValue,
     CallableValue,
+    LambdaValue,
     ReMatchValue {
     
     /**

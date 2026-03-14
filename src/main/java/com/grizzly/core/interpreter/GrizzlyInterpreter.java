@@ -174,7 +174,7 @@ public class GrizzlyInterpreter {
      */
     @FunctionalInterface
     public interface BuiltinFunction {
-        Value apply(List<Value> args, Map<String, Value> keywordArgs);
+        Value apply(List<Value> args, Map<String, Value> keywordArgs, CallableInvoker invoker);
     }
     
     private final Program program;
@@ -437,10 +437,13 @@ public class GrizzlyInterpreter {
         
         Value ctxVal = context.getOrNull(name);
         if (ctxVal instanceof CallableValue cv) {
-            return cv.call(args, kw);
+            return cv.call(args, kw, this::invokeCallable);
+        }
+        if (ctxVal instanceof LambdaValue lv) {
+            return lv.call(args, kw, this::evaluateExpression);
         }
         if (builtins.contains(name)) {
-            return builtins.get(name).apply(args, kw);
+            return builtins.get(name).apply(args, kw, this::invokeCallable);
         }
         
         FunctionDef func = program.findFunction(name);
@@ -725,10 +728,14 @@ public class GrizzlyInterpreter {
                 return evaluateMethodCall(m, context);
             } else if (expr instanceof FunctionCallExpression f) {
                 return evaluateFunctionCallExpression(f, context);
+            } else if (expr instanceof CallExpression c) {
+                return evaluateCallExpression(c, context);
             } else if (expr instanceof ConditionalExpression c) {
                 return evaluateConditionalExpression(c, context);
             } else if (expr instanceof FStringLiteral f) {
                 return evaluateFStringLiteral(f, context);
+            } else if (expr instanceof LambdaExpression le) {
+                return new LambdaValue(le, context);
             } else {
                 throw new GrizzlyExecutionException(
                     "Unknown expression type: " + expr.getClass().getSimpleName()
@@ -1228,14 +1235,14 @@ public class GrizzlyInterpreter {
                 Map<String, BuiltinFunction> modFns = modules.getModule(moduleName);
                 if (modFns != null && modFns.containsKey(methodName)) {
                     var ev = evaluateCallArguments(methodCall.arguments(), context);
-                    return modFns.get(methodName).apply(ev.positional(), ev.keyword());
+                    return modFns.get(methodName).apply(ev.positional(), ev.keyword(), this::invokeCallable);
                 }
                 DictValue modVal = modules.getModuleValue(moduleName);
                 if (modVal != null && modVal.containsKey(methodName)) {
                     Value attr = modVal.get(methodName);
                     if (attr instanceof CallableValue cv) {
                         var ev = evaluateCallArguments(methodCall.arguments(), context);
-                        return cv.call(ev.positional(), ev.keyword());
+                        return cv.call(ev.positional(), ev.keyword(), this::invokeCallable);
                     }
                 }
                 if (modFns != null || modVal != null) {
@@ -1253,7 +1260,7 @@ public class GrizzlyInterpreter {
         
         if (obj instanceof CallableValue cv) {
             var ev = evaluateCallArguments(methodCall.arguments(), context);
-            return cv.call(ev.positional(), ev.keyword());
+            return cv.call(ev.positional(), ev.keyword(), this::invokeCallable);
         }
         
         if (obj instanceof NullValue) {
@@ -1264,7 +1271,7 @@ public class GrizzlyInterpreter {
         
         var ev = evaluateCallArguments(methodCall.arguments(), context);
         if (obj instanceof ListValue list) {
-            return evaluateListMethod(list, methodName, ev.positional(), context);
+            return evaluateListMethod(list, methodName, ev.positional(), ev.keyword(), context);
         }
         
         if (obj instanceof StringValue str) {
@@ -1289,8 +1296,8 @@ public class GrizzlyInterpreter {
     }
     
     private Value evaluateListMethod(ListValue list, String methodName, 
-                                     List<Value> args, ExecutionContext context) {
-        return ListMethods.evaluate(list, methodName, args);
+                                     List<Value> args, Map<String, Value> kw, ExecutionContext context) {
+        return ListMethods.evaluate(list, methodName, args, kw, this::invokeCallable);
     }
     
     private Value evaluateStringMethod(StringValue str, String methodName,
@@ -1300,7 +1307,7 @@ public class GrizzlyInterpreter {
     
     private Value evaluateDictMethod(DictValue dict, String methodName,
                                      List<Value> args, ExecutionContext context) {
-        return DictMethods.evaluate(dict, methodName, args);
+        return DictMethods.evaluate(dict, methodName, args, this::invokeCallable);
     }
     
     private Value evaluateDateTimeMethod(DateTimeValue dt, String methodName,
@@ -1344,6 +1351,25 @@ public class GrizzlyInterpreter {
     private Value evaluateFunctionCallExpression(FunctionCallExpression funcCall, ExecutionContext context) {
         var evaluated = evaluateCallArguments(funcCall.arguments(), context);
         return invokeFunction(funcCall.functionName(), evaluated.positional(), evaluated.keyword(), context, 0);
+    }
+    
+    private Value evaluateCallExpression(CallExpression call, ExecutionContext context) {
+        Value callee = evaluateExpression(call.callee(), context);
+        var evaluated = evaluateCallArguments(call.arguments(), context);
+        return invokeCallable(callee, evaluated.positional(), evaluated.keyword());
+    }
+    
+    /** Invoke a callable (function or lambda) with given arguments. */
+    Value invokeCallable(Value callee, List<Value> args, Map<String, Value> kw) {
+        if (callee instanceof CallableValue cv) {
+            return cv.call(args, kw, this::invokeCallable);
+        }
+        if (callee instanceof LambdaValue lv) {
+            return lv.call(args, kw, this::evaluateExpression);
+        }
+        throw new GrizzlyExecutionException(
+            "object of type " + callee.typeName() + " is not callable"
+        );
     }
     
     private void setTarget(Expression target, Value value, ExecutionContext context) {

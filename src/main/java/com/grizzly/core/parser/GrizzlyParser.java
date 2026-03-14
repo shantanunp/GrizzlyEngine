@@ -1108,6 +1108,12 @@ public class GrizzlyParser {
             }
         }
         
+        // Lambda: lambda params : expr
+        if (token.type() == TokenType.LAMBDA) {
+            advance();
+            return parseLambda();
+        }
+        
         // Grouped expression: ( expression ) — e.g. (a + b), (x if c else y), (expr)[0:2]
         if (token.type() == TokenType.LPAREN) {
             advance();
@@ -1321,7 +1327,11 @@ public class GrizzlyParser {
     private Expression parseSubscriptAndAttrChain(Expression expr) {
         while (true) {
             TokenType tt = peek().type();
-            if (tt == TokenType.LBRACKET || tt == TokenType.SAFE_LBRACKET) {
+            if (tt == TokenType.LPAREN) {
+                advance();
+                var callArgs = parseCallArguments();
+                expr = new CallExpression(expr, callArgs);
+            } else if (tt == TokenType.LBRACKET || tt == TokenType.SAFE_LBRACKET) {
                 expr = parseSubscriptOn(expr);
             } else if (tt == TokenType.DOT || tt == TokenType.SAFE_DOT) {
                 boolean safe = (tt == TokenType.SAFE_DOT);
@@ -1339,6 +1349,24 @@ public class GrizzlyParser {
             }
         }
         return expr;
+    }
+    
+    /** Parse lambda params : expr. Params are simple identifiers (no defaults, no *). */
+    private LambdaExpression parseLambda() {
+        List<String> params = new ArrayList<>();
+        skipNewlinesAndIndentDedent();
+        if (peek().type() != TokenType.COLON) {
+            params.add(expect(TokenType.IDENTIFIER, "Expected parameter name").value());
+            while (peek().type() == TokenType.COMMA) {
+                advance();
+                skipNewlinesAndIndentDedent();
+                params.add(expect(TokenType.IDENTIFIER, "Expected parameter name").value());
+            }
+        }
+        expect(TokenType.COLON, "Expected ':' in lambda expression");
+        skipNewlinesAndIndentDedent();
+        Expression body = parseExpression();
+        return new LambdaExpression(params, body);
     }
     
     /**

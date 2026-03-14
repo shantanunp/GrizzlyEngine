@@ -48,7 +48,7 @@ public final class BuiltinRegistry {
     
     private void registerCoreFunctions() {
         // len()
-        functions.put("len", (args, kw) -> {
+        functions.put("len", (args, kw, invoker) -> {
             requireArgCount("len", args, 1);
             Value val = args.get(0);
             
@@ -66,7 +66,7 @@ public final class BuiltinRegistry {
         });
         
         // range()
-        functions.put("range", (args, kw) -> {
+        functions.put("range", (args, kw, invoker) -> {
             requireArgCountRange("range", args, 1, 3);
             
             int start, stop, step;
@@ -105,13 +105,13 @@ public final class BuiltinRegistry {
         });
         
         // str() - Python-compliant: str("hello") → "hello" (no extra quotes)
-        functions.put("str", (args, kw) -> {
+        functions.put("str", (args, kw, invoker) -> {
             requireArgCount("str", args, 1);
             return new StringValue(asString(args.get(0)));
         });
         
         // int() - Python-compliant: int("3.5") raises ValueError (no silent truncation)
-        functions.put("int", (args, kw) -> {
+        functions.put("int", (args, kw, invoker) -> {
             requireArgCount("int", args, 1);
             Value value = args.get(0);
             
@@ -136,7 +136,7 @@ public final class BuiltinRegistry {
         });
         
         // float() - convert to float
-        functions.put("float", (args, kw) -> {
+        functions.put("float", (args, kw, invoker) -> {
             requireArgCount("float", args, 1);
             Value value = args.get(0);
             
@@ -160,13 +160,13 @@ public final class BuiltinRegistry {
         });
         
         // bool() - convert to boolean
-        functions.put("bool", (args, kw) -> {
+        functions.put("bool", (args, kw, invoker) -> {
             requireArgCount("bool", args, 1);
             return BoolValue.of(args.get(0).isTruthy());
         });
         
         // abs() - absolute value
-        functions.put("abs", (args, kw) -> {
+        functions.put("abs", (args, kw, invoker) -> {
             requireArgCount("abs", args, 1);
             Value value = args.get(0);
             
@@ -185,7 +185,7 @@ public final class BuiltinRegistry {
         });
         
         // min() - minimum value
-        functions.put("min", (args, kw) -> {
+        functions.put("min", (args, kw, invoker) -> {
             if (args.isEmpty()) {
                 throw new GrizzlyExecutionException("min() requires at least 1 argument");
             }
@@ -201,7 +201,7 @@ public final class BuiltinRegistry {
         });
         
         // max() - maximum value
-        functions.put("max", (args, kw) -> {
+        functions.put("max", (args, kw, invoker) -> {
             if (args.isEmpty()) {
                 throw new GrizzlyExecutionException("max() requires at least 1 argument");
             }
@@ -217,7 +217,7 @@ public final class BuiltinRegistry {
         });
         
         // sum() - sum of values
-        functions.put("sum", (args, kw) -> {
+        functions.put("sum", (args, kw, invoker) -> {
             requireArgCount("sum", args, 1);
             ListValue list = requireType("sum", args.get(0), ListValue.class, "argument");
             
@@ -239,7 +239,7 @@ public final class BuiltinRegistry {
         });
         
         // print() - Python: print(*values, sep=' ', end='\n'). Logs via GrizzlyLogger.
-        functions.put("print", (args, kw) -> {
+        functions.put("print", (args, kw, invoker) -> {
             String sep = kw.containsKey("sep") ? asString(kw.get("sep")) : " ";
             String end = kw.containsKey("end") ? asString(kw.get("end")) : "\n";
             StringBuilder sb = new StringBuilder();
@@ -277,7 +277,7 @@ public final class BuiltinRegistry {
     
     private void registerIterationFunctions() {
         // enumerate() - returns list of [index, value] pairs
-        functions.put("enumerate", (args, kw) -> {
+        functions.put("enumerate", (args, kw, invoker) -> {
             requireArgCountRange("enumerate", args, 1, 2);
             ListValue list = requireType("enumerate", args.get(0), ListValue.class, "first argument");
             int start = args.size() > 1 ? toInt(args.get(1)) : 0;
@@ -295,7 +295,7 @@ public final class BuiltinRegistry {
         });
         
         // zip() - combine multiple lists into list of tuples
-        functions.put("zip", (args, kw) -> {
+        functions.put("zip", (args, kw, invoker) -> {
             if (args.isEmpty()) {
                 return ListValue.empty();
             }
@@ -321,21 +321,31 @@ public final class BuiltinRegistry {
         });
         
         // sorted() - return a new sorted list. Python: sorted(iterable, key=None, reverse=False)
-        functions.put("sorted", (args, kw) -> {
+        functions.put("sorted", (args, kw, invoker) -> {
             requireArgCountRange("sorted", args, 1, 2);
             ListValue list = requireType("sorted", args.get(0), ListValue.class, "first argument");
             boolean reverse = kw.containsKey("reverse") ? kw.get("reverse").isTruthy()
                 : (args.size() > 1 && args.get(1).isTruthy());
+            Value keyFn = kw.get("key");
             java.util.List<Value> sorted = new java.util.ArrayList<>(list.items());
-            sorted.sort((a, b) -> {
-                int cmp = ValueUtils.compareForSort(a, b);
-                return reverse ? -cmp : cmp;
-            });
+            if (keyFn != null && keyFn.isTruthy()) {
+                sorted.sort((a, b) -> {
+                    Value ka = invoker.invoke(keyFn, java.util.List.of(a), java.util.Map.of());
+                    Value kb = invoker.invoke(keyFn, java.util.List.of(b), java.util.Map.of());
+                    int cmp = ValueUtils.compareForSort(ka, kb);
+                    return reverse ? -cmp : cmp;
+                });
+            } else {
+                sorted.sort((a, b) -> {
+                    int cmp = ValueUtils.compareForSort(a, b);
+                    return reverse ? -cmp : cmp;
+                });
+            }
             return new ListValue(sorted);
         });
         
         // reversed() - return a new reversed list
-        functions.put("reversed", (args, kw) -> {
+        functions.put("reversed", (args, kw, invoker) -> {
             requireArgCount("reversed", args, 1);
             ListValue list = requireType("reversed", args.get(0), ListValue.class, "argument");
             
@@ -345,7 +355,7 @@ public final class BuiltinRegistry {
         });
         
         // any() - True if any element is truthy
-        functions.put("any", (args, kw) -> {
+        functions.put("any", (args, kw, invoker) -> {
             requireArgCount("any", args, 1);
             ListValue list = requireType("any", args.get(0), ListValue.class, "argument");
             
@@ -358,7 +368,7 @@ public final class BuiltinRegistry {
         });
         
         // all() - True if all elements are truthy
-        functions.put("all", (args, kw) -> {
+        functions.put("all", (args, kw, invoker) -> {
             requireArgCount("all", args, 1);
             ListValue list = requireType("all", args.get(0), ListValue.class, "argument");
             
@@ -371,7 +381,7 @@ public final class BuiltinRegistry {
         });
         
         // list() - convert to list
-        functions.put("list", (args, kw) -> {
+        functions.put("list", (args, kw, invoker) -> {
             if (args.isEmpty()) {
                 return ListValue.empty();
             }
@@ -400,7 +410,7 @@ public final class BuiltinRegistry {
         });
         
         // dict() - convert to dict or create empty
-        functions.put("dict", (args, kw) -> {
+        functions.put("dict", (args, kw, invoker) -> {
             if (args.isEmpty()) {
                 return DictValue.empty();
             }
@@ -433,13 +443,13 @@ public final class BuiltinRegistry {
         });
         
         // type() - get type name as string
-        functions.put("type", (args, kw) -> {
+        functions.put("type", (args, kw, invoker) -> {
             requireArgCount("type", args, 1);
             return new StringValue(args.get(0).typeName());
         });
         
         // isinstance() - Python-compatible: only str, int, float, bool, list, dict, type(None)
-        functions.put("isinstance", (args, kw) -> {
+        functions.put("isinstance", (args, kw, invoker) -> {
             requireArgCount("isinstance", args, 2);
             Value value = args.get(0);
             String typeName = asString(args.get(1));
@@ -459,7 +469,7 @@ public final class BuiltinRegistry {
         });
         
         // hasattr() - check if dict has key
-        functions.put("hasattr", (args, kw) -> {
+        functions.put("hasattr", (args, kw, invoker) -> {
             requireArgCount("hasattr", args, 2);
             if (!(args.get(0) instanceof DictValue dict)) {
                 return BoolValue.FALSE;
@@ -469,7 +479,7 @@ public final class BuiltinRegistry {
         });
         
         // getattr() - get dict key with optional default
-        functions.put("getattr", (args, kw) -> {
+        functions.put("getattr", (args, kw, invoker) -> {
             requireArgCountRange("getattr", args, 2, 3);
             if (!(args.get(0) instanceof DictValue dict)) {
                 if (args.size() > 2) {
@@ -493,7 +503,7 @@ public final class BuiltinRegistry {
     
     private void registerDateTimeFunctions() {
         // now()
-        functions.put("now", (args, kw) -> {
+        functions.put("now", (args, kw, invoker) -> {
             if (args.size() > 1) {
                 throw new GrizzlyExecutionException(
                     "now() takes 0 or 1 argument (optional timezone), got " + args.size()
@@ -516,7 +526,7 @@ public final class BuiltinRegistry {
         });
         
         // formatDate()
-        functions.put("formatDate", (args, kw) -> {
+        functions.put("formatDate", (args, kw, invoker) -> {
             requireArgCount("formatDate", args, 2);
             DateTimeValue dt = requireType("formatDate", args.get(0), DateTimeValue.class, "first argument");
             String format = asString(args.get(1));
@@ -535,7 +545,7 @@ public final class BuiltinRegistry {
     
     private void registerMathFunctions() {
         // round(number[, ndigits]) - Python-compliant with banker's rounding (HALF_EVEN)
-        functions.put("round", (args, kw) -> {
+        functions.put("round", (args, kw, invoker) -> {
             requireArgCountRange("round", args, 1, 2);
             Value value = args.get(0);
             int ndigits = args.size() > 1 ? toInt(args.get(1)) : 0;

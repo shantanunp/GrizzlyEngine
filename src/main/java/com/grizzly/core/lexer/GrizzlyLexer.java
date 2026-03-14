@@ -135,6 +135,7 @@ public class GrizzlyLexer {
     // Python keywords we recognize
     private static final Map<String, TokenType> KEYWORDS = Map.ofEntries(
         Map.entry("def", TokenType.DEF),
+        Map.entry("lambda", TokenType.LAMBDA),
         Map.entry("if", TokenType.IF),
         Map.entry("elif", TokenType.ELIF),
         Map.entry("else", TokenType.ELSE),

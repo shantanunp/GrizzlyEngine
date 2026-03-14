@@ -219,6 +219,10 @@ public class GrizzlyLogger {
                 formatExpression(b.right());
         } else if (expr instanceof FunctionCallExpression f) {
             return f.functionName() + "(...)";
+        } else if (expr instanceof LambdaExpression l) {
+            return "lambda " + String.join(", ", l.params()) + ": ...";
+        } else if (expr instanceof CallExpression c) {
+            return formatExpression(c.callee()) + "(...)";
         } else {
             return expr.getClass().getSimpleName();
         }

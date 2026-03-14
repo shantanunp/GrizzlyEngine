@@ -6,6 +6,7 @@ package com.grizzly.core.lexer;
 public enum TokenType {
     // Keywords
     DEF,        // def
+    LAMBDA,     // lambda
     IF,         // if
     ELIF,       // elif
     ELSE,       // else

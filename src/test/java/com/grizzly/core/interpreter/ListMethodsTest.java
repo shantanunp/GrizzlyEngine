@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -15,13 +16,16 @@ import static org.assertj.core.api.Assertions.*;
  */
 class ListMethodsTest {
     
+    private static final Map<String, Value> NO_KW = Map.of();
+    private static final CallableInvoker NO_INVOKER = null;
+    
     // ==================== remove() ====================
     
     @Test
     @DisplayName("remove() removes first occurrence of value")
     void remove() {
         ListValue list = createList(1, 2, 3, 2, 4);
-        ListMethods.evaluate(list, "remove", List.of(NumberValue.of(2)));
+        ListMethods.evaluate(list, "remove", List.of(NumberValue.of(2)), NO_KW, NO_INVOKER);
         
         assertThat(list.size()).isEqualTo(4);
         assertThat(((NumberValue) list.get(0)).asInt()).isEqualTo(1);
@@ -33,7 +37,7 @@ class ListMethodsTest {
     @DisplayName("remove() throws when value not found")
     void removeNotFound() {
         ListValue list = createList(1, 2, 3);
-        assertThatThrownBy(() -> ListMethods.evaluate(list, "remove", List.of(NumberValue.of(99))))
+        assertThatThrownBy(() -> ListMethods.evaluate(list, "remove", List.of(NumberValue.of(99)), NO_KW, NO_INVOKER))
             .isInstanceOf(GrizzlyExecutionException.class)
             .hasMessageContaining("not in list");
     }
@@ -44,7 +48,7 @@ class ListMethodsTest {
     @DisplayName("clear() removes all elements")
     void clear() {
         ListValue list = createList(1, 2, 3);
-        ListMethods.evaluate(list, "clear", List.of());
+        ListMethods.evaluate(list, "clear", List.of(), NO_KW, NO_INVOKER);
         
         assertThat(list.size()).isEqualTo(0);
         assertThat(list.isEmpty()).isTrue();
@@ -56,7 +60,7 @@ class ListMethodsTest {
     @DisplayName("copy() creates shallow copy")
     void copy() {
         ListValue original = createList(1, 2, 3);
-        Value result = ListMethods.evaluate(original, "copy", List.of());
+        Value result = ListMethods.evaluate(original, "copy", List.of(), NO_KW, NO_INVOKER);
         
         assertThat(result).isInstanceOf(ListValue.class);
         ListValue copy = (ListValue) result;
@@ -76,7 +80,7 @@ class ListMethodsTest {
     @DisplayName("sort() sorts in ascending order by default")
     void sortAscending() {
         ListValue list = createList(3, 1, 4, 1, 5);
-        ListMethods.evaluate(list, "sort", List.of());
+        ListMethods.evaluate(list, "sort", List.of(), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) list.get(0)).asInt()).isEqualTo(1);
         assertThat(((NumberValue) list.get(1)).asInt()).isEqualTo(1);
@@ -89,7 +93,7 @@ class ListMethodsTest {
     @DisplayName("sort() with reverse=True sorts descending")
     void sortDescending() {
         ListValue list = createList(3, 1, 4, 1, 5);
-        ListMethods.evaluate(list, "sort", List.of(BoolValue.TRUE));
+        ListMethods.evaluate(list, "sort", List.of(BoolValue.TRUE), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) list.get(0)).asInt()).isEqualTo(5);
         assertThat(((NumberValue) list.get(1)).asInt()).isEqualTo(4);
@@ -105,7 +109,7 @@ class ListMethodsTest {
         items.add(new StringValue("cherry"));
         ListValue list = new ListValue(items);
         
-        ListMethods.evaluate(list, "sort", List.of());
+        ListMethods.evaluate(list, "sort", List.of(), NO_KW, NO_INVOKER);
         
         assertThat(((StringValue) list.get(0)).value()).isEqualTo("apple");
         assertThat(((StringValue) list.get(1)).value()).isEqualTo("banana");
@@ -118,7 +122,7 @@ class ListMethodsTest {
     @DisplayName("index() finds first occurrence")
     void index() {
         ListValue list = createList(1, 2, 3, 2, 4);
-        Value result = ListMethods.evaluate(list, "index", List.of(NumberValue.of(2)));
+        Value result = ListMethods.evaluate(list, "index", List.of(NumberValue.of(2)), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(1);
     }
@@ -128,7 +132,7 @@ class ListMethodsTest {
     void indexWithStart() {
         ListValue list = createList(1, 2, 3, 2, 4);
         Value result = ListMethods.evaluate(list, "index", 
-            List.of(NumberValue.of(2), NumberValue.of(2)));
+            List.of(NumberValue.of(2), NumberValue.of(2)), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(3);
     }
@@ -140,7 +144,7 @@ class ListMethodsTest {
         
         // Should find 2 at index 1, not the one at index 3
         Value result = ListMethods.evaluate(list, "index", 
-            List.of(NumberValue.of(2), NumberValue.of(0), NumberValue.of(2)));
+            List.of(NumberValue.of(2), NumberValue.of(0), NumberValue.of(2)), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(1);
     }
@@ -149,7 +153,7 @@ class ListMethodsTest {
     @DisplayName("index() throws when not found")
     void indexNotFound() {
         ListValue list = createList(1, 2, 3);
-        assertThatThrownBy(() -> ListMethods.evaluate(list, "index", List.of(NumberValue.of(99))))
+        assertThatThrownBy(() -> ListMethods.evaluate(list, "index", List.of(NumberValue.of(99)), NO_KW, NO_INVOKER))
             .isInstanceOf(GrizzlyExecutionException.class)
             .hasMessageContaining("not found");
     }
@@ -160,7 +164,7 @@ class ListMethodsTest {
     @DisplayName("count() counts occurrences")
     void count() {
         ListValue list = createList(1, 2, 2, 3, 2, 4);
-        Value result = ListMethods.evaluate(list, "count", List.of(NumberValue.of(2)));
+        Value result = ListMethods.evaluate(list, "count", List.of(NumberValue.of(2)), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(3);
     }
@@ -169,7 +173,7 @@ class ListMethodsTest {
     @DisplayName("count() returns 0 for missing value")
     void countMissing() {
         ListValue list = createList(1, 2, 3);
-        Value result = ListMethods.evaluate(list, "count", List.of(NumberValue.of(99)));
+        Value result = ListMethods.evaluate(list, "count", List.of(NumberValue.of(99)), NO_KW, NO_INVOKER);
         
         assertThat(((NumberValue) result).asInt()).isEqualTo(0);
     }
