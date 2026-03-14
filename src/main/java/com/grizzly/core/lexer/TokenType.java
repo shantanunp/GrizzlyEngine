@@ -16,10 +16,8 @@ public enum TokenType {
     RETURN,     // return
     FOR,        // for
     IN,         // in
-    SWITCH,     // reserved; match (Python 3.10+) is used instead
     MATCH,      // match (Python 3.10+ structural pattern matching)
     CASE,       // case
-    DEFAULT,    // default
     BREAK,      // break
     CONTINUE,   // continue
     TRUE,       // True (Python style)
